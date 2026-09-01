@@ -9,12 +9,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "pg": "^8.16.3"
+    "pg": "8.16.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260829.0",
+    "@cloudflare/workers-types": "5.20260831.1",
     "@types/pg": "^8.15.5",
     "typescript": "^5.9.2",
-    "wrangler": "^4.33.2"
+    "wrangler": "4.127.1"
   }
 }
