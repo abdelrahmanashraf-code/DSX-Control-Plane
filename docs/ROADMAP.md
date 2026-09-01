@@ -1,279 +1,163 @@
-# DSX Control Plane — Delivery Roadmap
+# DSX Control Plane Roadmap
 
-This roadmap is sequential. A phase is not complete because code exists; it is complete only when its acceptance gate passes.
+## Phase 0 — Architecture and project rules
 
-## Phase 0 — Foundation and architecture
+Status: complete enough to proceed.
 
 Deliverables:
-- Project Charter
-- Architecture
-- Initial Data Model
-- Working Rules
-- ADRs for major architecture boundaries
-- Repository skeleton and development standards
-- Initial security model and environment strategy
+- project charter
+- system boundaries
+- target architecture
+- initial data model
+- working rules
+- architecture decision records
 
 Gate:
-- scope and ownership boundaries are documented;
-- lifecycle states are documented;
-- destructive/sensitive operations policy is documented;
-- no production infrastructure has been changed;
-- next phase has explicit acceptance criteria.
+- Control Plane owns SaaS operations.
+- Management Odoo owns CRM/accounting/payment business processes.
+- Customer Odoo remains the product runtime, not the subscription source of truth.
 
-## Phase 1 — Control Plane Core + first Node
+## Phase 1 — Control Plane core + first test node
 
-Goal: the platform can securely know about and observe one non-production DSX node.
+Status: in progress; local end-to-end node flow proven.
 
 Deliverables:
-- FastAPI API skeleton
-- PostgreSQL persistence/migrations
-- Admin authentication foundation
-- Node model/API
-- Node Agent skeleton
-- secure node registration/identity
-- heartbeat
-- CPU/RAM/disk/service health summary
-- node online/offline/stale detection
-- basic Admin Node list/detail
-- audit events for registration and sensitive node actions
+- FastAPI foundation for the permanent management service
+- temporary Cloudflare Worker + D1 adapter for early development
+- admin authentication
+- Node Agent enrollment
+- persistent per-node identity
+- authenticated heartbeat
+- CPU/RAM/disk/OS metrics
+- Odoo/PostgreSQL running-state detection
+- online/stale/offline detection
+- node revocation
+- audit events
+- hardened outbound-only Node Agent service definition
 
-Acceptance gate:
-- a test node can register without manual database edits;
-- heartbeats update observed state;
-- an invalid/revoked agent cannot report as the node;
-- node becomes stale/offline when heartbeat is lost according to policy;
-- no arbitrary shell endpoint exists;
-- tests cover registration, auth, replay/idempotency where relevant, and stale detection.
+Verified on `DSX-TEST-01`:
+- D1/Worker health
+- authenticated admin node list
+- one-time enrollment
+- accepted heartbeat
+- continuous heartbeat
+- node shown online with CPU/RAM/disk and Odoo/PostgreSQL state
+- online -> stale -> offline transition
+- offline -> online recovery after Agent restart
 
-## Phase 2 — Jobs + controlled node operations
+Remaining gate items:
+- verify revocation rejects the existing Agent credential
+- verify audit-event visibility for token creation, enrollment, and revocation
+- repeat enrollment/heartbeat flow on one NON-PRODUCTION server node
 
-Goal: long-running operations are durable and observable.
+No production customer node is part of the Phase 1 gate.
 
-Deliverables:
-- Redis-backed worker
-- Job and JobStep models
-- idempotency keys
-- retry strategy
-- correlation IDs
-- controlled health/restart operation
-- Needs Attention foundation
+## Phase 2 — Node management and inventory
 
-Acceptance gate:
-- API request can enqueue and return immediately;
-- worker failure does not lose job state;
-- retry cannot duplicate the operation;
-- operator sees safe failure reason and retry state;
-- secrets do not appear in logs/job output.
+Goal: understand and safely manage the infrastructure that hosts Odoo without creating customer databases yet.
 
-## Phase 3 — Backup and restore foundation
+Planned capabilities:
+- register multiple nodes
+- node labels/roles/pools
+- capacity and placement inputs
+- discover Odoo runtime information
+- discover PostgreSQL/database inventory using read-only typed operations
+- track node health history
+- surface failures and operational alerts
 
-Goal: prove DSX Native can protect one test tenant before production provisioning.
+Gate:
+- inventory is reliable on a non-production server
+- no arbitrary shell endpoint
+- all typed privileged operations are authenticated and audited
 
-Deliverables:
-- S3-compatible backup destination
-- PostgreSQL backup
-- filestore backup
-- retention metadata
-- manual backup job
-- restore job into non-production environment
-- restore verification checklist/health test
+## Phase 3 — Provisioning
 
-Acceptance gate:
-- backup artifacts are stored outside the source node;
-- a backup can restore DB + filestore successfully;
-- restored Odoo starts and passes health checks;
-- failed backup/restore appears in Needs Attention;
-- destructive restore is guarded and audited.
+Goal: create a new isolated customer Odoo database automatically from a controlled template.
 
-## Phase 4 — Trial provisioning MVP
+Planned capabilities:
+- sector templates (restaurant, cafe, retail, supermarket)
+- tenant/database records
+- placement selection
+- database creation
+- filestore preparation
+- DSX module installation/configuration
+- domain mapping
+- provisioning jobs with idempotency and retry
+- failure states visible to operators
 
-Goal: one approved Restaurant template can create a complete trial automatically.
+Gate:
+- repeated test provisioning is predictable and reversible
+- no production rollout before restore capability is proven
 
-Deliverables:
-- Customer model
-- Tenant model
-- Template model
-- one approved Restaurant template
-- node placement v1
-- tenant/database name reservation
-- database create/restore workflow
-- standard DSX configuration
-- tenant admin creation
-- route/hostname setup
-- DSX agent enrollment
-- health check
-- trial expiry state
+## Phase 4 — Backup and restore
 
-Acceptance gate:
-- create trial request results in a ready URL without SSH/manual DB work;
-- retry does not create duplicate database/tenant;
-- failure at each tested step leaves known recoverable state;
-- tenant is visible with node/database/release/health metadata;
-- expired trial can be suspended safely.
+Goal: backups independent of the hosting node.
 
-## Phase 5 — Trial intake + onboarding automation
+Planned capabilities:
+- database + filestore backups
+- S3-compatible object storage
+- retention policy
+- encrypted credentials
+- restore workflow
+- scheduled restore tests
 
-Goal: sales/implementation workload is reduced for normal demo users.
+Gate:
+- a disposable customer environment can be restored successfully from backup
 
-Deliverables:
-- public trial request endpoint/form integration
-- deduplication/rate/abuse controls
+## Phase 5 — Trial automation
+
+Goal: website trial request to usable 3-day demo without operator work.
+
+Planned capabilities:
+- DSX website request integration
 - sector/template selection
-- onboarding notification integration
-- short onboarding video link per sector
-- onboarding checklist/status
-- trial conversion handoff to CRM
+- trial pool placement
+- automatic domain/database creation
+- expiration and cleanup
+- conversion workflow toward production
 
-Acceptance gate:
-- standard trial can be requested and delivered without staff provisioning;
-- duplicate/retry submission is safe;
-- sales sees lead/trial status and exceptions;
-- implementation is not required for standard trial setup.
+## Phase 6 — Subscription and billing integration
 
-## Phase 6 — Subscription and entitlement engine
+Goal: connect commercial state to product entitlement without making customer POS dependent on continuous Control Plane availability.
 
-Goal: Control Plane owns customer access policy safely.
+Planned capabilities:
+- central plan/subscription state
+- Management Odoo CRM/invoice/payment integration
+- signed entitlement for customer Agent/Odoo
+- billing grace separate from connectivity grace
+- suspend/reactivate workflow
+- payment-proof exception handling where needed
 
-Deliverables:
-- Plan
-- Subscription
-- billing period rules
-- grace rules
-- signed entitlement issuance
-- DSX customer agent integration
-- connectivity grace
-- suspension/reactivation
-- reconciliation/heartbeat
+## Phase 7 — Customer portal
 
-Acceptance gate:
-- active paid entitlement works when Control Plane is temporarily unreachable within policy;
-- expired/unpaid subscription transitions predictably;
-- suspend/reactivate does not require server shutdown;
-- restore of an older customer DB cannot forge a newer subscription state;
-- entitlement actions are audited.
+Goal: simple customer self-service.
 
-## Phase 7 — Central Odoo CRM/Billing integration
-
-Goal: avoid rebuilding accounting while keeping SaaS truth in Control Plane.
-
-Deliverables:
-- customer mapping to Odoo partner
-- lead/opportunity integration
-- invoice request/reference flow
-- payment confirmation integration
-- manual payment proof workflow
-- idempotent reconciliation
-- overdue/payment exception dashboard
-
-Acceptance gate:
-- invoice financial truth remains in Odoo;
-- payment confirmation updates subscription exactly once;
-- duplicate webhook/sync calls are harmless;
-- temporary Odoo outage does not corrupt tenant/subscription state;
-- manual proof approval produces an auditable financial/subscription transition.
-
-## Phase 8 — Production tenant provisioning
-
-Goal: standard paid customer setup is automatic.
-
-Deliverables:
-- production node pool
-- production placement policy
-- production template/release controls
-- clean production provisioning after payment
-- credentials/onboarding delivery
-- production-specific backup policy
-
-Acceptance gate:
-- paid standard customer can move from payment-confirmed to ready production tenant without infrastructure staff;
-- production backups are enabled and tested;
-- test/trial infrastructure is not selected by production placement;
-- every production tenant has release, node, backup, subscription, and health records.
-
-## Phase 9 — Customer Portal
-
-Goal: reduce sales/support/accounting repetitive work.
-
-Deliverables:
-- customer authentication
+Planned capabilities:
 - subscription status
-- invoices/payment links or references
-- upload payment proof
-- tenant status/open system
-- onboarding content
-- support entry point
-- safe backup/service requests where approved
+- invoices/payment status
+- onboarding material
+- company/account details
+- support/contact entry points
 
-Acceptance gate:
-- customer cannot access another customer's resources;
-- no sensitive infrastructure details are exposed;
-- common subscription/payment/support tasks do not require staff to relay basic information manually.
+## Phase 8 — Release management
 
-## Phase 10 — Release management
+Goal: safe DSX product updates across many customer databases.
 
-Goal: operate product updates safely across many tenants.
+Planned capabilities:
+- release catalog
+- canary/rings
+- compatibility checks
+- per-tenant deployment status
+- rollback/recovery policy
+- no mass `git pull` against every customer simultaneously
 
-Deliverables:
-- immutable release records
-- desired vs observed release state
-- rollout stages
-- canary/percentage rollout
-- stop rollout
-- pre-upgrade backup hook
-- upgrade health checks
-- drift reporting
+## Phase 9 — Gradual CloudPepper exit
 
-Acceptance gate:
-- release can be tested on internal/trial/canary scopes before broad rollout;
-- failure can stop the rollout;
-- tenant versions are observable centrally;
-- release operations are auditable.
+Migration order:
+1. prove native Node Agent/control flow
+2. use native flow for trials
+3. migrate a small non-critical live cohort
+4. provision all new customers natively
+5. migrate remaining legacy customers in batches
 
-## Phase 11 — Multi-node scale and operations hardening
-
-Goal: operate many nodes from one place.
-
-Deliverables:
-- capacity thresholds
-- draining/maintenance modes
-- placement improvements
-- node failure playbooks
-- tenant migration workflow
-- rate/concurrency controls for large job bursts
-- operational dashboards/SLOs
-
-Acceptance gate:
-- 30 onboarding requests can be queued concurrently without unsafe duplicate execution;
-- node capacity prevents unsafe new placement;
-- node maintenance can drain new placements while existing tenants remain known;
-- failure simulations produce actionable Needs Attention items.
-
-## Phase 12 — CloudPepper exit
-
-Goal: make DSX Native the default provider only after it proves operational equivalence for DSX needs.
-
-Migration stages:
-1. DSX Native trials only.
-2. Small number of new real customers.
-3. Larger new-customer cohort.
-4. DSX Native becomes default for all new customers.
-5. Controlled migration tooling/playbook for existing customers.
-6. Retire CloudPepper dependency after agreed stability period.
-
-Exit gate:
-- provisioning, backup, verified restore, monitoring, releases, suspension/reactivation, and operational support are proven on DSX Native;
-- migration rollback path is documented/tested;
-- no mass cutover is required.
-
-## Definition of Done for every phase
-
-A feature is not Done without the applicable items:
-- implementation;
-- automated tests;
-- failure-path tests;
-- authorization/security checks;
-- observability/logging;
-- audit coverage for sensitive changes;
-- documentation;
-- operational recovery/rollback instructions;
-- acceptance criteria demonstrated in non-production.
+CloudPepper is removed only after the native DSX stack has proven provisioning, monitoring, backup/restore, and release safety.
