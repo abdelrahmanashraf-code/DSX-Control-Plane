@@ -1,140 +1,112 @@
 # DSX Control Plane — Project Charter
 
-## 1. Mission
+## Product mission
 
-Build a central SaaS control plane that manages the full DSX customer lifecycle with minimal human intervention: lead/trial onboarding, tenant provisioning, subscription entitlement, billing integration, suspension/reactivation, infrastructure health, backups, releases, and customer self-service.
+Build the operational control plane that allows DSX POS to be sold and operated as a scalable Odoo Community SaaS product without requiring manual infrastructure work for every customer.
 
-The platform must be designed for growth from tens of customers to thousands without turning each customer into a manual operations project.
+The target operating model is exception-based: normal customer onboarding, trial provisioning, subscription lifecycle, monitoring, backups and releases should be automated; operators intervene only for exceptions.
 
-## 2. Primary business outcome
+## Business context
 
-Normal operations should be automated. Human staff should work mainly on exceptions.
+DSX POS is an Odoo Community-based product sold as a recurring subscription. The platform must support growth from the current customer base to thousands of isolated customer databases while preserving operational safety and predictable support effort.
 
-Example target for 30 new customers in one day:
+## Source-of-truth boundaries
 
-- requests are accepted automatically;
-- jobs are queued safely;
-- tenants are placed on healthy nodes;
-- databases are provisioned from approved templates;
-- configuration and DSX modules are applied automatically;
-- health checks run automatically;
-- credentials/onboarding are delivered automatically;
-- staff only handle failed jobs, payment exceptions, or custom implementation requests.
+### DSX Control Plane
+Owns SaaS operational state:
+- customers/tenants
+- plans and subscription operational state
+- nodes and capacity
+- databases/instances
+- provisioning jobs
+- health and monitoring
+- backups/restores
+- releases/deployments
+- trial lifecycle
+- audit trail for privileged SaaS operations
 
-## 3. Source-of-truth boundaries
+### Management Odoo
+Owns business and financial workflows:
+- CRM
+- quotations/sales where used
+- invoices/accounting
+- payment recording and business follow-up
 
-### DSX Control Plane owns
+It integrates with the Control Plane but does not orchestrate infrastructure.
 
-- Customer platform identity
-- Tenant lifecycle
-- Trial vs production environment
-- Plans and subscription state
-- Entitlements and service access
-- Node/server registry
-- Tenant placement
-- Provisioning jobs
-- Backup/restore operational state
-- Health state
-- Release assignment and rollout state
-- Audit log
+### Customer Odoo
+Runs the DSX product for the customer. A small DSX Agent/subscription component consumes signed central entitlement and reports operational state, but the customer database is not the subscription source of truth.
 
-### Central Odoo owns
+## Core architecture rules
 
-- CRM pipeline
-- Accounting
-- Invoices
-- Payment registration
-- Receivables
-- Financial reporting
+- One isolated Odoo database per customer/tenant.
+- Multiple customer databases may share a managed node/cell.
+- Heavy customers can later move to dedicated nodes.
+- Placement is based on capacity and load, not a fixed number of customers per server.
+- Trial and production pools are separated.
+- Golden templates are maintained per target sector.
+- Subscription suspension normally locks entitlement rather than stopping Odoo infrastructure.
+- Connectivity grace and billing grace are separate concepts.
+- A Control Plane outage must not immediately disable a paying customer's POS.
+- Backups include database and filestore and are stored outside the application node.
+- Releases use canary/ring rollout rather than updating all tenants simultaneously.
+- Node management is outbound-only over HTTPS and uses typed operations; arbitrary remote shell is not an API feature.
+- Kubernetes, Kafka, and unnecessary microservice complexity are intentionally excluded from the initial product.
 
-### Customer Odoo owns
+## Technology direction
 
-- Customer operational business data
-- DSX POS/product data
-- Local enforcement of signed entitlement
-- Local health/identity information reported to the platform
+Permanent target:
+- Web UI: Next.js / React
+- API: FastAPI
+- Operational database: PostgreSQL
+- Queue/cache: Redis + worker
+- Node Agent: Python
+- Infrastructure automation: Ansible/Terraform where appropriate
+- Customer product: Odoo 18 Community + DSX modules
+- Monitoring: Prometheus/Grafana or equivalent
+- Backups: S3-compatible object storage
+- Cloudflare in front of the dedicated management service
 
-## 4. Non-negotiable architecture principles
+Temporary early-development path:
+- Cloudflare Worker + D1 provides the first lightweight control adapter until a dedicated DSX management VPS is ready.
+- The Node Agent HTTP contract is kept stable so the temporary persistence/backend can be replaced without reinstalling the protocol on customer nodes.
 
-1. Each customer tenant uses an isolated Odoo database.
-2. No customer provisioning through manual SSH in the normal workflow.
-3. No arbitrary shell execution from the web platform.
-4. Infrastructure actions must be explicit, authenticated, auditable, retryable, and idempotent where applicable.
-5. Subscription enforcement must not make a paying POS customer unusable because the central platform is temporarily unavailable; a controlled connectivity grace strategy is required.
-6. Billing suspension is not the same as deleting or shutting down infrastructure.
-7. Delete is never the first lifecycle action; suspension, archival, retention, and purge states must exist.
-8. Backups must live outside the source node and restore must be tested before production cutover.
-9. Release rollout must support staged deployment and stopping a rollout.
-10. CloudPepper removal is a migration outcome, not a day-one dependency removal.
+## Phase discipline
 
-## 5. Product users
+Fixed sequence:
+1. architecture/docs
+2. Control Plane core + first safe test node
+3. node management/inventory
+4. provisioning
+5. backup/restore
+6. trial automation
+7. subscription/billing integration
+8. customer portal
+9. release management
+10. gradual CloudPepper exit
 
-### Owner / Management
-Sees revenue, customers, growth, capacity, churn, and exceptions.
+Each phase has an acceptance gate. New ideas are placed in the backlog unless they are required to pass the current gate.
 
-### Sales
-Sees leads, trials, follow-up, conversion, and customer status. No server access.
+## Phase 1 proof completed so far
 
-### Implementation
-Sees paid customers waiting for onboarding and approved configuration work. Does not manually install standard modules.
+On the non-production local node `DSX-TEST-01`, the platform has already proven:
+- Cloudflare Worker + D1 health
+- admin authentication
+- one-time node enrollment
+- persistent per-node credential
+- authenticated heartbeat
+- CPU/RAM/disk and OS telemetry
+- Odoo/PostgreSQL running-state detection
+- continuous online heartbeat
+- online -> stale -> offline detection
+- offline -> online recovery after Agent restart
 
-### Accounting
-Sees invoices, payment proofs, receipts, overdue balances, and payment exceptions.
+Revocation/audit verification and one real non-production server test remain before the Phase 1 deployment gate is closed.
 
-### Support
-Sees customer, tenant health, subscription status, backup status, release version, and safe support actions.
+## CloudPepper exit principle
 
-### Technical Admin
-Sees nodes, jobs, backups, deployments, releases, capacity, monitoring, and controlled infrastructure operations.
+CloudPepper is not removed abruptly. Native DSX operations are proven first, then trials, then a small live cohort, then all new customers, and finally older customers are migrated in controlled batches.
 
-### Customer
-Sees subscription, invoices/payments, system status, support, onboarding, and safe tenant self-service only.
+## Definition of success
 
-## 6. Initial commercial reality
-
-The system must stay cost-conscious because DSX may sell low-price monthly subscriptions. Shared infrastructure must therefore be supported while preserving per-tenant database isolation. Dedicated infrastructure can remain an option for large tenants later.
-
-## 7. MVP definition
-
-The first meaningful production-capable MVP is reached only when DSX can:
-
-1. register and monitor a node;
-2. provision a tenant safely from one approved template;
-3. generate/route a tenant URL;
-4. configure and health-check the tenant automatically;
-5. back up and successfully restore that tenant;
-6. manage subscription entitlement centrally;
-7. integrate billing status with Central Odoo;
-8. suspend/reactivate safely;
-9. show failures in a clear Needs Attention queue;
-10. keep a complete audit trail.
-
-## 8. Explicitly out of scope for early phases
-
-- Building a new accounting engine
-- Building a new CRM engine
-- Rebuilding Grafana/Prometheus functionality
-- Kubernetes
-- Kafka/event-streaming platform
-- One VM/container stack per small customer
-- Rebuilding the DSX POS frontend as part of this project
-- Arbitrary remote shell console
-- Full CloudPepper replacement before DSX Native is proven
-
-## 9. Success metrics
-
-- Standard trial provisioning requires zero technical human steps.
-- Standard paid onboarding requires zero infrastructure human steps.
-- Failed provisioning can retry safely without duplicate tenants.
-- A node failure or platform outage does not incorrectly invalidate paid subscriptions.
-- Every backup policy used for production has a verified restore path.
-- Every sensitive action is audited.
-- Daily operations are exception-driven: staff focus on a small Needs Attention list rather than browsing all tenants.
-
-## 10. Direction-control rule
-
-Any new feature requested during implementation must answer:
-
-> Is this required to complete the current phase acceptance criteria?
-
-If no, it goes to the backlog and does not change the active phase.
+The project succeeds when DSX can onboard and operate a large customer base with automated provisioning, clear subscription state, reliable monitoring, recoverable backups, controlled releases, and minimal per-customer manual infrastructure work.
