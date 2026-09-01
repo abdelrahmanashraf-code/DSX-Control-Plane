@@ -26,6 +26,12 @@ dev = [
   "ruff>=0.12,<1.0"
 ]
 
+[project.scripts]
+dsx-node-agent = "dsx_node_agent.main:main"
+
+[tool.setuptools.packages.find]
+where = ["apps/api", "services/node_agent"]
+
 [tool.pytest.ini_options]
 pythonpath = ["apps/api", "services/node_agent"]
 testpaths = ["tests"]
