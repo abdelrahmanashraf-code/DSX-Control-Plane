@@ -24,10 +24,30 @@ A day with 30 new customers should result in automated queued jobs, not 30 manua
 - `docs/DATA_MODEL.md` — initial domain model and lifecycle states.
 - `docs/ROADMAP.md` — phased delivery plan and gates.
 - `docs/WORKING_RULES.md` — rules that prevent scope drift and unsafe operations.
+- `docs/NODE_AGENT_API_V1.md` — stable Phase 1 Node Agent HTTP contract.
 - `docs/decisions/` — Architecture Decision Records (ADRs).
 
 ## Current phase
 
-**Phase 0 — Architecture and project foundation.**
+**Phase 1 — Control Plane Core + First Test Node.**
 
-No production customer infrastructure will be changed during Phase 0.
+Implemented foundation:
+
+- FastAPI core skeleton and health endpoint.
+- Temporary Cloudflare Worker adapter designed for Hyperdrive + PostgreSQL.
+- One-time node enrollment tokens.
+- Unique per-node agent credentials stored server-side only as hashes.
+- Authenticated node heartbeat contract.
+- Online / stale / offline runtime status calculation.
+- Node revocation and audit events.
+- Read-only CPU, RAM, disk, OS, Odoo, and PostgreSQL process health metrics.
+- Hardened outbound-only Node Agent systemd deployment foundation.
+- Automated Python and Cloudflare TypeScript CI validation.
+
+Still blocked before the first live test-node connection:
+
+- A temporary PostgreSQL database for Control Plane state.
+- Cloudflare Hyperdrive binding and Worker deployment.
+- One non-production Linux test node.
+
+No production customer infrastructure should be changed in Phase 1.
