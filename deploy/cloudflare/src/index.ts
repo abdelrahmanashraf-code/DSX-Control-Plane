@@ -26,6 +26,17 @@ type EnrollmentRow = {
   requested_name: string | null;
 };
 
+type AuditRow = {
+  id: string;
+  event_type: string;
+  actor_type: string;
+  actor_id: string | null;
+  target_type: string;
+  target_id: string | null;
+  payload: string;
+  created_at: string;
+};
+
 const encoder = new TextEncoder();
 
 function json(data: unknown, status = 200): Response {
@@ -323,6 +334,24 @@ async function listNodes(request: Request, env: Env): Promise<Response> {
   });
 }
 
+async function listAuditEvents(request: Request, env: Env): Promise<Response> {
+  if (!(await isAdmin(request, env))) return json({ error: "unauthorized" }, 401);
+
+  const result = await env.DB.prepare(
+    `SELECT id, event_type, actor_type, actor_id, target_type, target_id, payload, created_at
+       FROM audit_events
+      ORDER BY created_at DESC
+      LIMIT 200`,
+  ).all<AuditRow>();
+
+  return json({
+    events: result.results.map((row) => ({
+      ...row,
+      payload: parseMetrics(row.payload),
+    })),
+  });
+}
+
 async function revokeNode(request: Request, env: Env, nodeId: string): Promise<Response> {
   if (!(await isAdmin(request, env))) return json({ error: "unauthorized" }, 401);
 
@@ -356,6 +385,9 @@ export default {
       }
       if (request.method === "GET" && url.pathname === "/v1/admin/nodes") {
         return await listNodes(request, env);
+      }
+      if (request.method === "GET" && url.pathname === "/v1/admin/audit-events") {
+        return await listAuditEvents(request, env);
       }
 
       const heartbeatMatch = url.pathname.match(/^\/v1\/nodes\/([0-9a-f-]+)\/heartbeat$/i);
