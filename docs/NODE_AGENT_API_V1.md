@@ -1,21 +1,29 @@
 # DSX Node Agent API v1
 
-Status: Phase 1 contract. Keep backward compatible when the Control Plane moves from the temporary Cloudflare adapter to the dedicated management server.
+Phase 1 exposes a deliberately small, typed HTTP contract between the DSX Control Plane and each Node Agent.
 
-## Authentication model
+## Safety boundary
 
-Two credential classes exist and must never be interchangeable:
+- Node Agents initiate outbound HTTPS only.
+- There is no inbound management port on a node.
+- No arbitrary shell execution exists in v1.
+- No database create/delete, restart, deploy, backup, restore, billing, or subscription enforcement exists in this phase.
 
-1. **Enrollment token** — one-time, short-lived, created by an authenticated Control Plane administrator. Stored server-side only as a SHA-256 hash.
-2. **Agent token** — unique per enrolled node, returned once during enrollment. Stored server-side only as a SHA-256 hash and locally on the node in a mode-0600 identity file.
+## Admin authentication
 
-Revoking a node invalidates that node's agent credential only.
+Admin endpoints require:
 
-## POST `/v1/admin/enrollment-tokens`
+```http
+Authorization: Bearer <ADMIN_API_TOKEN>
+```
 
-Admin-authenticated. Creates a one-time enrollment token.
+The token is stored as a Cloudflare Worker secret and must never be committed.
 
-Request:
+## Create enrollment token
+
+`POST /v1/admin/enrollment-tokens`
+
+Example body:
 
 ```json
 {
@@ -24,92 +32,47 @@ Request:
 }
 ```
 
-Response `201`:
+The returned enrollment token is short-lived, one-time, and shown once.
 
-```json
-{
-  "enrollment_token": "dsx_enroll_...",
-  "expires_at": "2026-09-01T19:00:00Z",
-  "node_name": "DSX-TEST-01"
-}
+## Enroll node
+
+`POST /v1/nodes/enroll`
+
+The agent sends its one-time enrollment token, node name, hostname, and agent version. A successful response returns a `node_id` and long-lived `agent_token`. The raw agent token is shown once; the Control Plane stores only its SHA-256 hash.
+
+## Heartbeat
+
+`POST /v1/nodes/{node_id}/heartbeat`
+
+The Agent authenticates with:
+
+```http
+Authorization: Bearer <agent_token>
 ```
 
-## POST `/v1/nodes/enroll`
+Payload includes observed time, hostname, agent version, and read-only node metrics. The current collector reports CPU, RAM, disk, OS, boot time, and basic Odoo/PostgreSQL running state.
 
-Public endpoint protected by the one-time enrollment token.
+Effective state is derived from the last accepted heartbeat:
 
-Request:
+- `online`: within the configured stale threshold.
+- `stale`: older than the stale threshold but within the offline threshold.
+- `offline`: older than the offline threshold.
+- `revoked`: node credential was administratively revoked.
 
-```json
-{
-  "enrollment_token": "dsx_enroll_...",
-  "name": "DSX-TEST-01",
-  "hostname": "dsx-test-01",
-  "agent_version": "0.1.0"
-}
-```
+## List nodes
 
-Response `201`:
+`GET /v1/admin/nodes`
 
-```json
-{
-  "node_id": "uuid",
-  "agent_token": "dsx_agent_..."
-}
-```
+Returns known nodes, latest metrics, lifecycle state, timestamps, and effective online/stale/offline/revoked status.
 
-The same enrollment token cannot be reused.
+## Revoke node
 
-## POST `/v1/nodes/{node_id}/heartbeat`
+`POST /v1/admin/nodes/{node_id}/revoke`
 
-Authentication: `Authorization: Bearer <agent_token>`.
+Revocation changes the lifecycle state to `revoked`. Future heartbeats using that node credential are rejected with `401` and `invalid_or_revoked_agent`.
 
-Request:
+## Audit events
 
-```json
-{
-  "observed_at": "2026-09-01T18:30:00Z",
-  "hostname": "dsx-test-01",
-  "agent_version": "0.1.0",
-  "metrics": {
-    "cpu_percent": 22.5,
-    "memory_percent": 48.1,
-    "disk_percent": 31.2,
-    "services": {
-      "odoo": {"running": true},
-      "postgresql": {"running": true}
-    }
-  }
-}
-```
+`GET /v1/admin/audit-events`
 
-Response `200`:
-
-```json
-{
-  "status": "accepted",
-  "server_time": "2026-09-01T18:30:01Z"
-}
-```
-
-Revoked or invalid agents receive `401`.
-
-## GET `/v1/admin/nodes`
-
-Admin-authenticated. Lists observed nodes with effective runtime status:
-
-- `never_seen`
-- `online`
-- `stale`
-- `offline`
-- `revoked`
-
-Runtime status is derived from `last_seen_at`; it is not manually edited.
-
-## POST `/v1/admin/nodes/{node_id}/revoke`
-
-Admin-authenticated. Revokes only the selected node and writes an audit event.
-
-## Explicit non-goals in v1
-
-There is no generic command execution endpoint. v1 does not create databases, restart Odoo, access PostgreSQL credentials, deploy code, read customer data, perform backups, restore data, or delete tenants.
+Returns the most recent Phase 1 control events, including enrollment-token creation, node enrollment, and node revocation. This endpoint exists so the deployment gate can prove that privileged lifecycle operations are auditable.
