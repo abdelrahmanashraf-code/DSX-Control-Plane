@@ -4,6 +4,15 @@ The Node Agent is outbound-only in Phase 1. It sends HTTPS heartbeats to the DSX
 
 ## Install on a non-production Ubuntu test node
 
+Install the Python venv prerequisite first. On Ubuntu 24.04 with Python 3.12:
+
+```bash
+sudo apt update
+sudo apt install -y python3.12-venv
+```
+
+Then install the agent:
+
 ```bash
 sudo useradd --system --home /nonexistent --shell /usr/sbin/nologin dsx-agent || true
 sudo mkdir -p /opt/dsx-control-plane
@@ -12,9 +21,11 @@ sudo chown "$USER":"$USER" /opt/dsx-control-plane
 git clone https://github.com/abdelrahmanashraf-code/DSX-Control-Plane.git /opt/dsx-control-plane
 cd /opt/dsx-control-plane
 python3.12 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install .
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install .
 ```
+
+If the repository is already cloned, do not clone it again. Remove only the failed `.venv`, install `python3.12-venv`, and recreate the virtual environment.
 
 Create `/etc/dsx-node-agent.env` owned by root and mode `0600`:
 
