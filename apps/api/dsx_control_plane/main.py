@@ -1,6 +1,5 @@
-from fastapi import FastAPI
-
 from dsx_control_plane.settings import get_settings
+from fastapi import FastAPI
 
 
 settings = get_settings()
