@@ -27,23 +27,7 @@ cd deploy/cloudflare
 npm install
 ```
 
-## 3. Apply the Phase 1 schema
-
-```bash
-npx wrangler d1 execute dsx-control-plane-dev \
-  --remote \
-  --file=migrations/0001_phase1_nodes.sql
-```
-
-The migration creates only:
-
-- `node_enrollment_tokens`
-- `nodes`
-- `audit_events`
-
-No customer database is touched.
-
-## 4. Configure the admin secret
+## 3. Configure the admin secret
 
 Generate a long random value locally and store it only as a Cloudflare Worker secret:
 
@@ -53,12 +37,20 @@ npx wrangler secret put ADMIN_API_TOKEN
 
 Never commit the admin token, enrollment tokens, or node agent credentials.
 
-## 5. Validate and deploy
+## 4. Validate and deploy
 
 ```bash
 npm run typecheck
 npm run deploy
 ```
+
+`npm run deploy` automatically applies the idempotent Phase 1 D1 schema before deploying the Worker. The schema creates only:
+
+- `node_enrollment_tokens`
+- `nodes`
+- `audit_events`
+
+No customer database is touched.
 
 Verify:
 
@@ -72,7 +64,7 @@ Expected response contains:
 {"status":"ok","service":"dsx-control-plane-edge","storage":"d1"}
 ```
 
-## 6. Create a one-time node enrollment token
+## 5. Create a one-time node enrollment token
 
 ```bash
 curl -X POST https://<worker-host>/v1/admin/enrollment-tokens \
