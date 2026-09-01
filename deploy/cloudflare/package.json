@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler d1 execute DB --remote --file=migrations/0001_phase1_nodes.sql --yes && wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
