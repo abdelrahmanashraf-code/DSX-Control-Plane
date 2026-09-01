@@ -1,6 +1,5 @@
-from fastapi.testclient import TestClient
-
 from dsx_control_plane.main import app
+from fastapi.testclient import TestClient
 
 
 def test_healthz() -> None:
