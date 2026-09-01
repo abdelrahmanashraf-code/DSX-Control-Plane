@@ -3,15 +3,15 @@
   "name": "dsx-control-plane-edge",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
-  "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "NODE_STALE_SECONDS": "90",
     "NODE_OFFLINE_SECONDS": "300"
   },
-  "hyperdrive": [
+  "d1_databases": [
     {
-      "binding": "HYPERDRIVE",
-      "id": "d1b5ebb5fd484e5a8c166503235254e5"
+      "binding": "DB",
+      "database_name": "dsx-control-plane-dev",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
     }
   ]
 }
