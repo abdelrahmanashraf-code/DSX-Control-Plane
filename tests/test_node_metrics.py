@@ -19,9 +19,12 @@ def test_collect_node_metrics_has_expected_safe_fields() -> None:
         "disk_free_bytes",
         "disk_percent",
         "boot_time",
+        "services",
     }
 
     assert expected.issubset(payload)
     assert payload["cpu_count"] >= 1
     assert payload["memory_total_bytes"] > 0
     assert payload["disk_total_bytes"] > 0
+    assert isinstance(payload["services"]["odoo"]["running"], bool)
+    assert isinstance(payload["services"]["postgresql"]["running"], bool)
