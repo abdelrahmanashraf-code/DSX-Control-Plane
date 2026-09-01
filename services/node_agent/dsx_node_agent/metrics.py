@@ -9,6 +9,23 @@ from typing import Any
 import psutil
 
 
+def _service_process_running(kind: str) -> bool:
+    """Best-effort, read-only process discovery without executing shell commands."""
+    markers = {
+        "odoo": ("odoo", "odoo-bin"),
+        "postgresql": ("postgres", "postgresql"),
+    }[kind]
+    for process in psutil.process_iter(["name", "cmdline"]):
+        try:
+            name = str(process.info.get("name") or "").lower()
+            cmdline = " ".join(process.info.get("cmdline") or []).lower()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+        if any(marker in name or marker in cmdline for marker in markers):
+            return True
+    return False
+
+
 def collect_node_metrics() -> dict[str, Any]:
     """Collect non-secret host metrics for a node heartbeat payload."""
     memory = psutil.virtual_memory()
@@ -29,4 +46,8 @@ def collect_node_metrics() -> dict[str, Any]:
         "disk_free_bytes": disk.free,
         "disk_percent": disk.percent,
         "boot_time": datetime.fromtimestamp(psutil.boot_time(), tz=timezone.utc).isoformat(),
+        "services": {
+            "odoo": {"running": _service_process_running("odoo")},
+            "postgresql": {"running": _service_process_running("postgresql")},
+        },
     }
