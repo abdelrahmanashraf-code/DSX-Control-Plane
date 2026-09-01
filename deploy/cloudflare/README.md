@@ -4,44 +4,46 @@ This directory hosts the temporary DSX Phase 1 control adapter. It is intentiona
 
 ## Architecture
 
-Cloudflare Worker -> Hyperdrive -> PostgreSQL
+Cloudflare Worker -> D1
 
 The Node Agent only makes outbound HTTPS requests to the Worker. No inbound management port is required on a node for Phase 1.
 
-## Prerequisites
+D1 is temporary development storage. The permanent target remains the dedicated DSX management server with FastAPI + PostgreSQL behind Cloudflare.
 
-- Cloudflare account with Workers and Hyperdrive available.
-- A PostgreSQL database reachable by Cloudflare Hyperdrive.
-- Node.js/npm and Wrangler on the deployment workstation.
-- `psql` or another PostgreSQL client for applying migrations.
+## 1. Create the D1 database
 
-## 1. Prepare PostgreSQL
+Create one Cloudflare D1 database named:
 
-Create an empty DSX Control Plane database, then apply:
-
-```bash
-psql "$DATABASE_URL" -f migrations/0001_phase1_nodes.sql
+```text
+dsx-control-plane-dev
 ```
 
-Do not use a customer Odoo database for Control Plane state.
+Copy its Database ID into `wrangler.jsonc` in place of `REPLACE_WITH_D1_DATABASE_ID`.
 
-## 2. Install Worker dependencies
+## 2. Install dependencies
 
 ```bash
 cd deploy/cloudflare
 npm install
 ```
 
-## 3. Create Hyperdrive
+## 3. Apply the Phase 1 schema
 
 ```bash
-npx wrangler hyperdrive create dsx-control-plane \
-  --connection-string="$DATABASE_URL"
+npx wrangler d1 execute dsx-control-plane-dev \
+  --remote \
+  --file=migrations/0001_phase1_nodes.sql
 ```
 
-Copy the returned Hyperdrive ID into `wrangler.jsonc` in place of `REPLACE_WITH_HYPERDRIVE_ID`.
+The migration creates only:
 
-## 4. Configure admin secret
+- `node_enrollment_tokens`
+- `nodes`
+- `audit_events`
+
+No customer database is touched.
+
+## 4. Configure the admin secret
 
 Generate a long random value locally and store it only as a Cloudflare Worker secret:
 
@@ -49,7 +51,7 @@ Generate a long random value locally and store it only as a Cloudflare Worker se
 npx wrangler secret put ADMIN_API_TOKEN
 ```
 
-Never commit the admin token, database password, enrollment tokens, or node agent credentials.
+Never commit the admin token, enrollment tokens, or node agent credentials.
 
 ## 5. Validate and deploy
 
@@ -64,7 +66,11 @@ Verify:
 curl https://<worker-host>/healthz
 ```
 
-Expected response contains `"status":"ok"`.
+Expected response contains:
+
+```json
+{"status":"ok","service":"dsx-control-plane-edge","storage":"d1"}
+```
 
 ## 6. Create a one-time node enrollment token
 
@@ -81,11 +87,11 @@ The returned enrollment token is one-time and short-lived. Supply it to the test
 
 - No generic shell/command endpoint exists.
 - Enrollment tokens are stored only as SHA-256 hashes and are one-use.
-- Agent credentials are returned once and stored only as hashes in PostgreSQL.
+- Agent credentials are returned once and stored only as hashes in D1.
 - Revoking one node does not affect other nodes.
 - Heartbeats expose operational metrics only; no passwords, configuration files, environment dumps, or database credentials are collected.
 - Admin actions create audit events.
 
 ## Exit path
 
-This Worker is a temporary adapter. The HTTP contract used by Node Agents must remain stable when the main FastAPI Control Plane later moves to the dedicated DSX management server behind Cloudflare.
+This Worker and D1 are temporary adapters. The HTTP contract used by Node Agents must remain stable when the main FastAPI Control Plane later moves to the dedicated DSX management server behind Cloudflare with PostgreSQL persistence.
