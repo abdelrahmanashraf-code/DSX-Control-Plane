@@ -5,6 +5,8 @@ import json
 import sys
 import time
 
+import httpx
+
 from dsx_node_agent.client import ControlPlaneClient
 from dsx_node_agent.metrics import collect_node_metrics
 from dsx_node_agent.settings import AgentSettings
@@ -44,7 +46,7 @@ def main() -> None:
         while True:
             try:
                 client.heartbeat(identity)
-            except Exception as exc:  # keep agent alive through transient network/control-plane failures
+            except httpx.HTTPError as exc:
                 print(f"heartbeat failed: {type(exc).__name__}", file=sys.stderr, flush=True)
             time.sleep(settings.heartbeat_seconds)
     except KeyboardInterrupt:
