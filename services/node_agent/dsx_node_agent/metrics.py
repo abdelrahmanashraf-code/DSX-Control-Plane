@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import platform
 import socket
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import psutil
@@ -32,7 +32,7 @@ def collect_node_metrics() -> dict[str, Any]:
     disk = psutil.disk_usage("/")
 
     return {
-        "observed_at": datetime.now(timezone.utc).isoformat(),
+        "observed_at": datetime.now(UTC).isoformat(),
         "hostname": socket.gethostname(),
         "os": platform.system(),
         "os_release": platform.release(),
@@ -45,7 +45,7 @@ def collect_node_metrics() -> dict[str, Any]:
         "disk_total_bytes": disk.total,
         "disk_free_bytes": disk.free,
         "disk_percent": disk.percent,
-        "boot_time": datetime.fromtimestamp(psutil.boot_time(), tz=timezone.utc).isoformat(),
+        "boot_time": datetime.fromtimestamp(psutil.boot_time(), tz=UTC).isoformat(),
         "services": {
             "odoo": {"running": _service_process_running("odoo")},
             "postgresql": {"running": _service_process_running("postgresql")},
