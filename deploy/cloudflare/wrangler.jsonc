@@ -11,7 +11,7 @@
     {
       "binding": "DB",
       "database_name": "dsx-control-plane-dev",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+      "database_id": "ff736893-8880-4c3b-b5aa-497bea1a6b87"
     }
   ]
 }
