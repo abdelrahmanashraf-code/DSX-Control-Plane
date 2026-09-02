@@ -9,8 +9,9 @@ import httpx
 
 from dsx_node_agent.client import ControlPlaneClient
 from dsx_node_agent.metrics import collect_node_metrics
+from dsx_node_agent.operations import OperationProtocolError, execute_operation, parse_claimed_operation
 from dsx_node_agent.settings import AgentSettings
-from dsx_node_agent.state import load_identity
+from dsx_node_agent.state import NodeIdentity, load_identity
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -21,6 +22,35 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("heartbeat-once", help="Send one authenticated heartbeat and exit")
     sub.add_parser("run", help="Run the heartbeat loop")
     return parser
+
+
+def _process_one_operation(client: ControlPlaneClient, identity: NodeIdentity) -> bool:
+    claimed = parse_claimed_operation(client.claim_operation(identity))
+    if claimed is None:
+        return False
+
+    print(
+        f"claimed typed operation id={claimed.operation_id} type={claimed.operation_type}",
+        file=sys.stderr,
+        flush=True,
+    )
+    client.report_operation_result(
+        identity,
+        operation_id=claimed.operation_id,
+        lease_token=claimed.lease_token,
+        state="running",
+    )
+
+    result = execute_operation(claimed)
+    client.report_operation_result(
+        identity,
+        operation_id=claimed.operation_id,
+        lease_token=claimed.lease_token,
+        state=result.state,
+        error_code=result.error_code,
+        database_name=result.database_name,
+    )
+    return True
 
 
 def main() -> None:
@@ -42,12 +72,24 @@ def main() -> None:
         print(json.dumps(client.heartbeat(identity), indent=2, sort_keys=True))
         return
 
+    next_operation_poll = 0.0
     try:
         while True:
             try:
                 client.heartbeat(identity)
             except httpx.HTTPError as exc:
                 print(f"heartbeat failed: {type(exc).__name__}", file=sys.stderr, flush=True)
+
+            monotonic_now = time.monotonic()
+            if settings.enable_operations and monotonic_now >= next_operation_poll:
+                try:
+                    _process_one_operation(client, identity)
+                except OperationProtocolError as exc:
+                    print(f"operation protocol rejected: {exc}", file=sys.stderr, flush=True)
+                except httpx.HTTPError as exc:
+                    print(f"operation request failed: {type(exc).__name__}", file=sys.stderr, flush=True)
+                next_operation_poll = monotonic_now + settings.operation_poll_seconds
+
             time.sleep(settings.heartbeat_seconds)
     except KeyboardInterrupt:
         return
