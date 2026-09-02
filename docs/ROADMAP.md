@@ -49,6 +49,8 @@ Verified first on `DSX-TEST-01` and repeated successfully on real non-production
 
 Gate: PASSED.
 
+The credential used for the real-node acceptance test was intentionally revoked after the final 401 rejection check. A fresh enrollment must be used when that test node is brought into Phase 3.
+
 ## Phase 2 — Node management and inventory
 
 Status: COMPLETE.
