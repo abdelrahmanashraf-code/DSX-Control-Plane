@@ -14,3 +14,12 @@ def test_agent_settings_never_auto_reads_cwd_dotenv(monkeypatch, tmp_path: Path)
 
     assert settings.node_name == "explicit-node"
     assert AgentSettings.model_config.get("env_file") is None
+
+
+def test_typed_operations_are_disabled_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("DSX_ENABLE_OPERATIONS", raising=False)
+
+    settings = AgentSettings()
+
+    assert settings.enable_operations is False
+    assert settings.operation_poll_seconds == 30
