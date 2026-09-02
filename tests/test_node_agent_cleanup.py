@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from dsx_node_agent.operation_dispatch import (
@@ -65,7 +63,7 @@ def test_privileged_cleanup_parser_requires_test_only_identity_fields() -> None:
     assert parsed.environment_kind == "test"
 
     unsafe = valid_cleanup_claim()["operation"]
-    unsafe["payload"]["path"] = str(Path("/etc/shadow"))
+    unsafe["payload"]["path"] = "/etc/shadow"
     with pytest.raises(ProvisionerError, match="invalid_payload_fields"):
         parse_cleanup_request(unsafe)
 
