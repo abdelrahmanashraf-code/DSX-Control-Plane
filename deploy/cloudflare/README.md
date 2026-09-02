@@ -10,6 +10,16 @@ The Node Agent only makes outbound HTTPS requests to the Worker. No inbound mana
 
 D1 is temporary development storage. The permanent target remains the dedicated DSX management server with FastAPI + PostgreSQL behind Cloudflare.
 
+## Prerequisite
+
+Cloudflare Wrangler 4.127.1 requires Node.js 22 or newer. Verify before installing dependencies:
+
+```bash
+node --version
+```
+
+Expected: `v22.x` or newer.
+
 ## 1. Create the D1 database
 
 Create one Cloudflare D1 database named:
