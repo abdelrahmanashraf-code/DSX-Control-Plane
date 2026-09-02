@@ -1,4 +1,6 @@
 import { listOperationalAlerts } from "./alerts";
+import { handleCleanupAdminRoute } from "./cleanup";
+import { handleCleanupOperationRoute } from "./cleanupOperations";
 import { listNodeHealthHistory } from "./healthHistory";
 import legacyWorker from "./index";
 import { handleNodeOperationRoute } from "./nodeOperations";
@@ -28,8 +30,14 @@ export default {
       return await listNodeHealthHistory(request, env, historyMatch[1]);
     }
 
+    const cleanupOperationResponse = await handleCleanupOperationRoute(request, env);
+    if (cleanupOperationResponse) return cleanupOperationResponse;
+
     const nodeOperationResponse = await handleNodeOperationRoute(request, env);
     if (nodeOperationResponse) return nodeOperationResponse;
+
+    const cleanupAdminResponse = await handleCleanupAdminRoute(request, env);
+    if (cleanupAdminResponse) return cleanupAdminResponse;
 
     const retryResponse = await handleProvisioningRetryRoute(request, env);
     if (retryResponse) return retryResponse;
