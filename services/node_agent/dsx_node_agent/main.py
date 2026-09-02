@@ -87,7 +87,7 @@ def _advance_active_operation(
     if active.result is None and active.future.done():
         try:
             active.result = active.future.result()
-        except Exception:
+        except Exception:  # noqa: BLE001 - process boundary must fail closed on executor bugs.
             active.result = OperationExecutionResult(
                 state="failed", error_code="local_provisioner_internal_error"
             )
