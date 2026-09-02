@@ -47,5 +47,7 @@ jobs:
         run: npm install
       - name: Unit tests
         run: npm test
+      - name: D1 migration test
+        run: npm run test:migrations
       - name: Typecheck
         run: npm run typecheck
