@@ -13,9 +13,9 @@ Permanent target: Next.js/React + FastAPI + PostgreSQL + Redis/worker on a dedic
 
 For early development, a temporary Cloudflare Worker + D1 adapter is used so the Node Agent contract can be proven before the management VPS is introduced.
 
-## Phase 1 status
+## Phase 1 status — COMPLETE
 
-The complete local/laptop non-production acceptance flow is proven:
+The complete non-production acceptance flow is proven on both the local test machine and a real Ubuntu 24.04 non-production server:
 
 - Cloudflare Worker + D1 live
 - admin API authentication working
@@ -29,25 +29,33 @@ The complete local/laptop non-production acceptance flow is proven:
 - offline -> online recovery verified
 - node revocation rejects the old Agent credential with HTTP 401
 - audit events verified for token creation, enrollment and revocation
+- real non-production server gate passed
 
-Only one Phase 1 gate item remains: repeat the safe flow on one real NON-PRODUCTION Linux server.
+## Phase 2 status — COMPLETE
 
-## Phase 2 status
+Node management, read-only inventory, health history and operational alerting are validated on the real non-production node.
 
-Node management and read-only inventory work is in progress.
-
-Implemented so far:
+Verified capabilities:
 
 - node roles, pools, labels and placement capacity metadata
 - authenticated node metadata update with audit logging
 - read-only Odoo/PostgreSQL process discovery
 - fixed local version probes without shell execution
 - cached read-only PostgreSQL database inventory with database names and sizes only
+- real PostgreSQL inventory validated with 13 databases on PostgreSQL 16.15
 - bounded outputs and sanitized failure codes
 - no passwords, DSNs, config contents, environment dumps or raw PostgreSQL stderr returned
-- Python/Ruff/Pytest and Cloudflare unit/typecheck CI coverage remains green
+- five-minute health-history sampling with seven-day retention
+- healthy, stale and offline operational alert states validated
+- offline -> online recovery validated
+- revoked Agent credential rejected with HTTP 401
+- Python/Ruff/Pytest and Cloudflare unit/typecheck/migration CI coverage green
 
-Remaining Phase 2 work includes deployment/validation on a real NON-PRODUCTION node, health history and operational alerts.
+## Current phase — Phase 3: Provisioning
+
+The next goal is to create a new isolated customer Odoo database automatically from a controlled DSX template.
+
+Phase 3 will introduce only bounded, typed provisioning operations. It will not introduce arbitrary remote shell access.
 
 ## Repository layout
 
@@ -62,16 +70,18 @@ Remaining Phase 2 work includes deployment/validation on a real NON-PRODUCTION n
 
 There is no arbitrary remote shell endpoint. Phase 1 and Phase 2 inventory work does not create/delete customer databases, restart Odoo, deploy updates, or return secrets from nodes.
 
+Provisioning work must remain typed, authenticated, audited, idempotent and restricted to explicit test resources until the Phase 3 gate passes.
+
 Secrets such as Cloudflare tokens, admin tokens, enrollment tokens, Agent credentials, passwords and connection strings must never be committed or pasted into issues/chat.
 
 ## Project direction
 
 The implementation sequence is intentionally fixed:
 
-1. architecture/docs
-2. Control Plane + first test node
-3. node management/inventory
-4. provisioning
+1. architecture/docs — complete
+2. Control Plane + first test node — complete
+3. node management/inventory — complete
+4. provisioning — current
 5. backup/restore
 6. trial automation
 7. subscription/billing integration
