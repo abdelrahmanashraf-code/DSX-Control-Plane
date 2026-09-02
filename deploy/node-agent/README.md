@@ -1,98 +1,49 @@
-# DSX Node Agent Deployment
+# DSX Node Agent deployment
 
-The Node Agent is outbound-only. It sends HTTPS heartbeats to the DSX Control Plane and does not expose a management port or arbitrary shell endpoint.
+The Node Agent is an outbound-only service. It sends bounded node diagnostics and authenticated heartbeats to the DSX Control Plane. It does not expose a listener and it does not provide a generic remote shell.
 
-## Install on a non-production Ubuntu test node
+## Node Agent
 
-Install the Python venv prerequisite first. On Ubuntu 24.04 with Python 3.12:
+Install the repository under `/opt/dsx-control-plane`, create a dedicated `dsx-agent` system user/group, install the Python package into `/opt/dsx-control-plane/.venv`, and install `dsx-node-agent.service` under `/etc/systemd/system/`.
 
-```bash
-sudo apt update
-sudo apt install -y python3.12-venv git
-```
+The service reads non-secret runtime settings from `/etc/dsx-node-agent.env` and stores the enrolled identity in `/var/lib/dsx-node-agent/identity.json` with restrictive permissions. Enrollment credentials and agent tokens must never be committed to Git.
 
-Then install the agent:
+The service is deliberately hardened with `NoNewPrivileges`, `ProtectSystem=strict`, private devices/tmp, kernel/control-group protections and no inbound listener. `AF_UNIX` is permitted so read-only PostgreSQL inventory can use the local Unix socket; `AF_INET`/`AF_INET6` are required only for outbound HTTPS heartbeats and operation polling.
 
-```bash
-sudo useradd --system --home /nonexistent --shell /usr/sbin/nologin dsx-agent || true
-sudo mkdir -p /opt/dsx-control-plane
-sudo chown "$USER":"$USER" /opt/dsx-control-plane
+### PostgreSQL inventory role
 
-if [ -d /opt/dsx-control-plane/.git ]; then
-  git -C /opt/dsx-control-plane pull --ff-only origin main
-else
-  git clone https://github.com/abdelrahmanashraf-code/DSX-Control-Plane.git /opt/dsx-control-plane
-fi
+`postgresql-readonly.sql` creates the local PostgreSQL login role `dsx-agent` with `NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`, `NOREPLICATION`, a small connection limit and `pg_read_all_stats`. It intentionally defines no password. On the verified non-production node the OS user `dsx-agent` connects over the local Unix socket using peer authentication. Do not weaken `pg_hba.conf` just to make inventory work.
 
-cd /opt/dsx-control-plane
-python3.12 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install .
-```
+## Phase 3 typed local provisioner
 
-If a previous virtual environment is broken, remove only `/opt/dsx-control-plane/.venv`, install `python3.12-venv`, and recreate it. Do not remove the repository, node identity, customer data, or PostgreSQL data.
+Phase 3 separates privileged local provisioning from the unprivileged outbound Node Agent. The Agent can only claim the allow-listed `provision_odoo_environment` operation and forwards a strict JSON payload to a local Unix socket. It cannot send a command string, executable path, arbitrary SQL or shell fragment.
 
-Create `/etc/dsx-node-agent.env` owned by root and mode `0600`:
+`dsx-node-provisioner.service` is the privileged local helper. It has no network address family except `AF_UNIX`, uses fixed PostgreSQL client binaries, and is restricted by systemd to the DSX provisioner state directory plus the verified Odoo filestore root.
 
-```text
-DSX_CONTROL_PLANE_URL=https://<control-plane-host>
-DSX_NODE_NAME=DSX-TEST-SERVER-01
-DSX_HEARTBEAT_SECONDS=30
-DSX_REQUEST_TIMEOUT_SECONDS=10
-DSX_AGENT_VERSION=0.1.0
-```
+The real non-production server inspection established the following restaurant golden-template baseline:
 
-## Read-only PostgreSQL inventory
+- source database: `dsx_restaurant_demo_master`
+- database owner: `odoo`
+- Odoo OS owner/group: `odoo:odoo`
+- filestore root: `/var/lib/odoo/.local/share/Odoo/filestore`
+- source filestore mode: `0700`
+- source database installed-module count observed during inspection: 114
 
-For a native Ubuntu PostgreSQL node using the normal local `peer` authentication rule, create the dedicated local inventory role:
+`dsx-provisioner.example.json` contains this verified test-node profile but stays `"enabled": false` in Git. Production and trial environments are blocked locally in Phase 3 even if the remote Control Plane is misconfigured.
 
-```bash
-sudo -u postgres psql -v ON_ERROR_STOP=1 -f /opt/dsx-control-plane/deploy/node-agent/postgresql-readonly.sql
-```
+The approved restaurant validation baseline currently includes:
 
-The role is intentionally named `dsx-agent` to match the Linux service user for peer authentication. It has no password and is explicitly `NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`, and `NOREPLICATION`. It receives only the built-in `pg_read_all_stats` membership needed for bounded database names/sizes and PostgreSQL runtime visibility.
+`ds_access_control`, `ds_backend_branding`, `ds_business_dashboard`, `ds_login_branding`, `ds_pos_branding`, `ds_pos_delivery`, `ds_restaurant_theme`, `ds_ui_core`, `pos_customer_then_kitchen_receipt`, `pos_restaurant`, `restaurant_pos_recipe`, and `wt_pos_access_right`.
 
-If the PostgreSQL host does not use compatible local peer authentication, do not weaken `pg_hba.conf` just for the Agent. Database inventory should remain unavailable until a provider-specific read-only adapter is introduced.
+These modules are not installed by arbitrary remote commands. The Phase 3 flow clones the controlled golden database and then validates that the approved baseline is installed before it can report `ready`.
 
-## One-time enrollment
+### Safe installation sequence for the non-production gate
 
-1. Create a short-lived enrollment token from the Control Plane admin API.
-2. Run enrollment once without saving the token to `/etc/dsx-node-agent.env`:
+1. Pull the reviewed repository revision on the non-production node and reinstall the editable Python package in `/opt/dsx-control-plane/.venv`.
+2. Copy `deploy/node-agent/dsx-node-provisioner.service` to `/etc/systemd/system/`.
+3. Copy `deploy/node-agent/dsx-provisioner.example.json` to `/etc/dsx-provisioner.json`, owned by root and not group/world writable.
+4. Keep `enabled` set to `false` for the initial service-boundary test.
+5. Reload systemd and start `dsx-node-provisioner`; verify the Unix socket exists and is accessible to `dsx-agent`.
+6. Only after that boundary passes, explicitly enable the local test-only profile and fresh-enroll the Node Agent for the Phase 3 live provisioning acceptance.
 
-```bash
-sudo install -d -o dsx-agent -g dsx-agent -m 0700 /var/lib/dsx-node-agent
-sudo -u dsx-agent env \
-  DSX_CONTROL_PLANE_URL=https://<control-plane-host> \
-  DSX_NODE_NAME=DSX-TEST-SERVER-01 \
-  DSX_AGENT_STATE_FILE=/var/lib/dsx-node-agent/identity.json \
-  DSX_ENROLLMENT_TOKEN='<one-time-token>' \
-  /opt/dsx-control-plane/.venv/bin/dsx-node-agent enroll
-```
-
-The resulting identity file is stored with mode `0600`. The one-time enrollment token should then be discarded.
-
-## Install service
-
-```bash
-sudo cp deploy/node-agent/dsx-node-agent.service /etc/systemd/system/
-sudo chmod 600 /etc/dsx-node-agent.env
-sudo systemctl daemon-reload
-sudo systemctl enable --now dsx-node-agent
-sudo systemctl status dsx-node-agent
-```
-
-The service permits `AF_UNIX` only so it can use the local PostgreSQL socket, plus outbound IPv4/IPv6 for HTTPS heartbeats. It still exposes no listener or management port.
-
-## Local diagnostics
-
-This command is read-only and never prints agent credentials:
-
-```bash
-/opt/dsx-control-plane/.venv/bin/dsx-node-agent diagnostics
-```
-
-Phase 2 diagnostics include safe runtime/database inventory when local PostgreSQL peer access is available. Raw process command lines, config contents, environment variables, passwords, tokens, DSNs, and PostgreSQL stderr are not returned.
-
-## Safety boundary
-
-There is no endpoint for arbitrary shell commands, database creation/deletion, restart, backup, restore, deploy, package installation, or customer data reads. Later privileged operations must be fixed/typed, authenticated, audited, and proven on non-production first.
+Never put enrollment tokens, agent credentials, database passwords, DSNs, private keys or Cloudflare admin tokens into the provisioner JSON, repository, service unit or shell history.
