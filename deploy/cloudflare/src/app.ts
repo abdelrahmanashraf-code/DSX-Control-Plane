@@ -1,5 +1,6 @@
-import legacyWorker from "./index";
+import { listOperationalAlerts } from "./alerts";
 import { listNodeHealthHistory } from "./healthHistory";
+import legacyWorker from "./index";
 
 interface Env {
   DB: D1Database;
@@ -11,10 +12,14 @@ interface Env {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    if (request.method === "GET" && url.pathname === "/v1/admin/alerts") {
+      return await listOperationalAlerts(request, env);
+    }
+
     const historyMatch = url.pathname.match(
       /^\/v1\/admin\/nodes\/([0-9a-f-]+)\/health-history$/i,
     );
-
     if (request.method === "GET" && historyMatch) {
       return await listNodeHealthHistory(request, env, historyMatch[1]);
     }
