@@ -1,3 +1,5 @@
+import { parseNodeMetadata } from "./nodeMetadata";
+
 interface Env {
   DB: D1Database;
   ADMIN_API_TOKEN: string;
@@ -13,6 +15,12 @@ type NodeRow = {
   hostname: string;
   agent_version: string;
   lifecycle_state: string;
+  role: string;
+  pool: string;
+  labels: string;
+  max_tenants: number | null;
+  reserved_memory_mb: number;
+  reserved_disk_gb: number;
   last_seen_at: string | null;
   last_observed_at: string | null;
   metrics: string;
@@ -303,7 +311,7 @@ function effectiveNodeStatus(row: NodeRow, env: Env): string {
   return "offline";
 }
 
-function parseMetrics(raw: string): JsonObject {
+function parseObject(raw: string): JsonObject {
   try {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
@@ -319,6 +327,7 @@ async function listNodes(request: Request, env: Env): Promise<Response> {
 
   const result = await env.DB.prepare(
     `SELECT id, name, hostname, agent_version, lifecycle_state,
+            role, pool, labels, max_tenants, reserved_memory_mb, reserved_disk_gb,
             last_seen_at, last_observed_at, metrics, created_at, updated_at, revoked_at
        FROM nodes
       ORDER BY created_at DESC
@@ -328,10 +337,49 @@ async function listNodes(request: Request, env: Env): Promise<Response> {
   return json({
     nodes: result.results.map((row) => ({
       ...row,
-      metrics: parseMetrics(row.metrics),
+      labels: parseObject(row.labels),
+      metrics: parseObject(row.metrics),
       status: effectiveNodeStatus(row, env),
     })),
   });
+}
+
+async function updateNodeMetadata(request: Request, env: Env, nodeId: string): Promise<Response> {
+  if (!(await isAdmin(request, env))) return json({ error: "unauthorized" }, 401);
+
+  const body = await readJson(request);
+  if (!body) return json({ error: "invalid_json" }, 400);
+
+  let metadata;
+  try {
+    metadata = parseNodeMetadata(body);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "invalid_node_metadata" }, 400);
+  }
+
+  const updatedAt = nowIso();
+  const result = await env.DB.prepare(
+    `UPDATE nodes
+        SET role = ?, pool = ?, labels = ?, max_tenants = ?,
+            reserved_memory_mb = ?, reserved_disk_gb = ?, updated_at = ?
+      WHERE id = ? AND lifecycle_state = 'active'`,
+  )
+    .bind(
+      metadata.role,
+      metadata.pool,
+      JSON.stringify(metadata.labels),
+      metadata.max_tenants,
+      metadata.reserved_memory_mb,
+      metadata.reserved_disk_gb,
+      updatedAt,
+      nodeId,
+    )
+    .run();
+
+  if (!result.meta.changes) return json({ error: "active_node_not_found" }, 404);
+
+  await audit(env, "node.metadata.updated", "admin", "admin-api", "node", nodeId, metadata);
+  return json({ status: "updated", node_id: nodeId, metadata });
 }
 
 async function listAuditEvents(request: Request, env: Env): Promise<Response> {
@@ -347,7 +395,7 @@ async function listAuditEvents(request: Request, env: Env): Promise<Response> {
   return json({
     events: result.results.map((row) => ({
       ...row,
-      payload: parseMetrics(row.payload),
+      payload: parseObject(row.payload),
     })),
   });
 }
@@ -375,7 +423,7 @@ export default {
 
     try {
       if (request.method === "GET" && url.pathname === "/healthz") {
-        return json({ status: "ok", service: "dsx-control-plane-edge", storage: "d1" });
+        return json({ status: "ok", service: "dsx-control-plane", storage: "d1" });
       }
       if (request.method === "POST" && url.pathname === "/v1/admin/enrollment-tokens") {
         return await createEnrollmentToken(request, env);
@@ -393,6 +441,11 @@ export default {
       const heartbeatMatch = url.pathname.match(/^\/v1\/nodes\/([0-9a-f-]+)\/heartbeat$/i);
       if (request.method === "POST" && heartbeatMatch) {
         return await heartbeat(request, env, heartbeatMatch[1]);
+      }
+
+      const metadataMatch = url.pathname.match(/^\/v1\/admin\/nodes\/([0-9a-f-]+)\/metadata$/i);
+      if (request.method === "PUT" && metadataMatch) {
+        return await updateNodeMetadata(request, env, metadataMatch[1]);
       }
 
       const revokeMatch = url.pathname.match(/^\/v1\/admin\/nodes\/([0-9a-f-]+)\/revoke$/i);
