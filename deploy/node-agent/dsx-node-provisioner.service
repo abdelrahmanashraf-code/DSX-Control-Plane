@@ -1,0 +1,33 @@
+[Unit]
+Description=DSX Typed Local Odoo Provisioner
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=root
+Group=dsx-agent
+ExecStart=/opt/dsx-control-plane/.venv/bin/dsx-node-provisioner serve --config /etc/dsx-provisioner.json --socket /run/dsx-provisioner/provisioner.sock
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=dsx-provisioner
+RuntimeDirectoryMode=0750
+StateDirectory=dsx-provisioner
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/var/lib/dsx-provisioner /var/odoo
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID
+UMask=0007
+
+[Install]
+WantedBy=multi-user.target
