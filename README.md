@@ -51,7 +51,7 @@ Verified capabilities:
 - final real-node credential revocation validated; old heartbeat rejected with HTTP 401
 - Python/Ruff/Pytest and Cloudflare unit/typecheck/migration CI coverage green
 
-The Phase 1 deployment gate and the Phase 2 node-management gate are closed. The test credential used for acceptance was intentionally revoked at the end of the gate.
+The Phase 1 deployment gate and the Phase 2 node-management gate are closed. The test credential used for acceptance was intentionally revoked at the end of the gate. Phase 3 will use a fresh enrollment for the non-production provisioning node.
 
 ## Current phase — Phase 3: Provisioning
 
