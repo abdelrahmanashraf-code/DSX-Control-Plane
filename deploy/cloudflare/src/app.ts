@@ -1,6 +1,7 @@
 import { listOperationalAlerts } from "./alerts";
 import { listNodeHealthHistory } from "./healthHistory";
 import legacyWorker from "./index";
+import { handleProvisioningAdminRoute } from "./provisioning";
 
 interface Env {
   DB: D1Database;
@@ -23,6 +24,9 @@ export default {
     if (request.method === "GET" && historyMatch) {
       return await listNodeHealthHistory(request, env, historyMatch[1]);
     }
+
+    const provisioningResponse = await handleProvisioningAdminRoute(request, env);
+    if (provisioningResponse) return provisioningResponse;
 
     return await legacyWorker.fetch(request, env);
   },
