@@ -19,7 +19,7 @@ Gate:
 
 ## Phase 1 — Control Plane core + first test node
 
-Status: local acceptance PASS; one real non-production server repeat remains.
+Status: local acceptance complete; one real non-production server repeat remains.
 
 Deliverables:
 - FastAPI foundation for the permanent management service
@@ -39,37 +39,39 @@ Verified on `DSX-TEST-01`:
 - D1/Worker health
 - authenticated admin node list
 - one-time enrollment
-- accepted and continuous heartbeat
-- CPU/RAM/disk plus Odoo/PostgreSQL state
+- accepted heartbeat
+- continuous heartbeat
+- node shown online with CPU/RAM/disk and Odoo/PostgreSQL state
 - online -> stale -> offline transition
 - offline -> online recovery after Agent restart
-- revocation rejects old Agent credential with HTTP 401
-- audit visibility for token creation, enrollment, and revocation
+- revocation rejects the previous Agent credential with HTTP 401
+- audit events visible for token creation, enrollment, and revocation
 
 Remaining gate item:
-- repeat the safe enrollment/heartbeat flow on one real NON-PRODUCTION Linux server node
+- repeat enrollment/heartbeat flow on one real NON-PRODUCTION server node
 
 No production customer node is part of the Phase 1 gate.
 
 ## Phase 2 — Node management and inventory
 
+Status: in progress; metadata and read-only local runtime/database inventory implemented and covered by CI.
+
 Goal: understand and safely manage the infrastructure that hosts Odoo without creating customer databases yet.
 
-Status: started in code while the external Phase 1 server gate is pending.
+Implemented:
+- node labels/roles/pools
+- capacity and placement inputs
+- authenticated metadata update with audit event
+- read-only Odoo/PostgreSQL process discovery
+- fixed local version probes without shell execution
+- read-only PostgreSQL database inventory using fixed SQL and `--no-password`
+- bounded database names/sizes, five-minute cache, output/time limits
+- sanitized failure reason codes with no stderr/credentials/connection strings
+- Python/Ruff/Pytest and Cloudflare unit/typecheck CI green
 
-Implemented and unit-tested:
-- node role (`odoo-postgres`, `odoo`, `postgresql`)
-- node pool assignment
-- bounded node labels
-- placement capacity inputs (`max_tenants`, reserved RAM, reserved disk)
-- authenticated admin metadata update endpoint
-- audit event for node metadata changes
-- D1 migration tracking for Phase 2 schema
-
-Next capabilities:
-- validate metadata on a real non-production server
-- discover Odoo runtime information
-- discover PostgreSQL/database inventory using read-only typed operations
+Remaining:
+- deploy Phase 2 D1 migration/API to the temporary canonical Worker
+- validate metadata + runtime/database inventory on one real NON-PRODUCTION node
 - track node health history
 - surface failures and operational alerts
 
