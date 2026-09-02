@@ -28,6 +28,7 @@ dev = [
 
 [project.scripts]
 dsx-node-agent = "dsx_node_agent.main:main"
+dsx-node-provisioner = "dsx_node_agent.provisioner:main"
 
 [tool.setuptools.packages.find]
 where = ["apps/api", "services/node_agent"]
