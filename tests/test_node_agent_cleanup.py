@@ -27,6 +27,15 @@ def valid_cleanup_claim() -> dict:
     }
 
 
+def valid_privileged_cleanup_request() -> dict:
+    operation = valid_cleanup_claim()["operation"]
+    return {
+        "operation_id": operation["id"],
+        "type": operation["type"],
+        "payload": operation["payload"],
+    }
+
+
 def test_cleanup_claim_is_strictly_typed() -> None:
     operation = parse_any_claimed_operation(valid_cleanup_claim())
     assert isinstance(operation, CleanupClaimedOperation)
@@ -56,17 +65,23 @@ def test_cleanup_executor_fails_closed_without_privileged_socket() -> None:
 
 
 def test_privileged_cleanup_parser_requires_test_only_identity_fields() -> None:
-    operation = valid_cleanup_claim()["operation"]
-    parsed = parse_cleanup_request(operation)
+    request = valid_privileged_cleanup_request()
+    parsed = parse_cleanup_request(request)
     assert parsed.database_name == "dsx_restaurant_demo_12345678"
     assert parsed.environment_kind == "test"
 
-    unsafe = valid_cleanup_claim()["operation"]
+    unsafe = valid_privileged_cleanup_request()
     unsafe["payload"]["path"] = "/etc/shadow"
     with pytest.raises(ProvisionerError, match="invalid_payload_fields"):
         parse_cleanup_request(unsafe)
 
-    production = valid_cleanup_claim()["operation"]
+    production = valid_privileged_cleanup_request()
     production["payload"]["environment_kind"] = "production"
     with pytest.raises(ProvisionerError, match="cleanup_non_test_environment_blocked"):
         parse_cleanup_request(production)
+
+
+def test_privileged_cleanup_boundary_never_accepts_lease_fields() -> None:
+    claim_operation = valid_cleanup_claim()["operation"]
+    with pytest.raises(ProvisionerError, match="invalid_request_fields"):
+        parse_cleanup_request(claim_operation)
