@@ -17,9 +17,12 @@ def _default_state_file() -> Path:
 
 
 class AgentSettings(BaseSettings):
+    # Production agents receive configuration only through explicit DSX_* environment
+    # variables (systemd loads /etc/dsx-node-agent.env). Do not auto-read a cwd .env:
+    # the service account may not be allowed to inspect the caller's working directory,
+    # and implicit dotenv discovery is unnecessary for the node-agent trust boundary.
     model_config = SettingsConfigDict(
         env_prefix="DSX_",
-        env_file=".env",
         extra="ignore",
     )
 
