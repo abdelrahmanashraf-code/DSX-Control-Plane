@@ -8,6 +8,8 @@ from typing import Any
 
 import psutil
 
+from dsx_node_agent.inventory import collect_runtime_inventory
+
 
 def _service_process_running(kind: str) -> bool:
     """Best-effort, read-only process discovery without executing shell commands."""
@@ -50,4 +52,5 @@ def collect_node_metrics() -> dict[str, Any]:
             "odoo": {"running": _service_process_running("odoo")},
             "postgresql": {"running": _service_process_running("postgresql")},
         },
+        "runtime_inventory": collect_runtime_inventory(),
     }
