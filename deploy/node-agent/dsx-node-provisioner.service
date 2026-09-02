@@ -14,7 +14,11 @@ RuntimeDirectory=dsx-provisioner
 RuntimeDirectoryMode=0750
 StateDirectory=dsx-provisioner
 StateDirectoryMode=0700
-NoNewPrivileges=true
+# The typed provisioner must deliberately drop from root to the configured
+# postgres OS account for fixed PostgreSQL argv. Keep the capability bounding
+# set narrow and block creation of SUID/SGID files, but do not prohibit this
+# controlled runtime credential transition.
+NoNewPrivileges=false
 PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
