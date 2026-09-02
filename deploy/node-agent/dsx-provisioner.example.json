@@ -1,0 +1,18 @@
+{
+  "enabled": false,
+  "phase": "test-only",
+  "postgres_os_user": "postgres",
+  "work_root": "/var/lib/dsx-provisioner/work",
+  "profiles": {
+    "template-restaurant-v1": {
+      "source_database": "dsx_restaurant_demo_master",
+      "database_prefix": "dsx_restaurant",
+      "database_owner": "odoo",
+      "filestore_root": "/REPLACE_AFTER_NON_PRODUCTION_SERVER_INSPECTION",
+      "filestore_user": "odoo",
+      "filestore_group": "odoo",
+      "allowed_modules": [],
+      "allow_empty_filestore": false
+    }
+  }
+}
