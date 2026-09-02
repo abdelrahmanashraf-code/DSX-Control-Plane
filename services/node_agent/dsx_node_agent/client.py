@@ -68,7 +68,7 @@ class ControlPlaneClient:
         response.raise_for_status()
         data = response.json()
         if not isinstance(data, dict):
-            raise RuntimeError("invalid_operation_claim_response")
+            raise TypeError("invalid_operation_claim_response")
         return data
 
     def report_operation_result(
