@@ -8,8 +8,8 @@ from dsx_node_agent import inventory
 
 
 class FakeProcess:
-    def __init__(self, name: str, cmdline: list[str]) -> None:
-        self.info = {"name": name, "cmdline": cmdline}
+    def __init__(self, name: str, cmdline: list[str], cwd: str | None = None) -> None:
+        self.info = {"name": name, "cmdline": cmdline, "cwd": cwd}
 
 
 def test_runtime_inventory_is_bounded_and_does_not_return_cmdlines(monkeypatch) -> None:
@@ -64,6 +64,49 @@ def test_version_probe_uses_fixed_argv_without_shell(monkeypatch) -> None:
     assert isinstance(kwargs, dict)
     assert kwargs.get("stdin") is subprocess.DEVNULL
     assert "shell" not in kwargs
+
+
+def test_odoo_version_falls_back_to_running_venv_process_without_leaking_config(monkeypatch) -> None:
+    processes = [
+        FakeProcess(
+            "python3",
+            [
+                "/var/odoo/master/venv/bin/python3",
+                "src/odoo-bin",
+                "--config",
+                "/secret/odoo.conf",
+            ],
+            cwd="/var/odoo/master",
+        )
+    ]
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(inventory.psutil, "process_iter", lambda _attrs: processes)
+    monkeypatch.setattr(inventory.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(
+        inventory,
+        "collect_database_inventory",
+        lambda: {"collected": False, "reason": "postgresql_access_unavailable"},
+    )
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        return SimpleNamespace(returncode=0, stdout="Odoo Server 18.0\n", stderr="")
+
+    monkeypatch.setattr(inventory.subprocess, "run", fake_run)
+
+    payload = inventory.collect_runtime_inventory()
+
+    assert payload["odoo"]["version"] == "Odoo Server 18.0"
+    assert calls == [
+        [
+            "/var/odoo/master/venv/bin/python3",
+            "/var/odoo/master/src/odoo-bin",
+            "--version",
+        ]
+    ]
+    assert "/secret/odoo.conf" not in repr(calls)
+    assert "/secret/odoo.conf" not in repr(payload)
 
 
 def test_database_inventory_uses_no_password_fixed_query_and_sanitized_env(monkeypatch) -> None:
