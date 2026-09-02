@@ -54,7 +54,7 @@ No production customer node is part of the Phase 1 gate.
 
 ## Phase 2 — Node management and inventory
 
-Status: in progress; metadata and read-only local runtime/database inventory implemented and covered by CI.
+Status: code implementation complete for the current gate; deployment and real-node validation remain.
 
 Goal: understand and safely manage the infrastructure that hosts Odoo without creating customer databases yet.
 
@@ -67,13 +67,15 @@ Implemented:
 - read-only PostgreSQL database inventory using fixed SQL and `--no-password`
 - bounded database names/sizes, five-minute cache, output/time limits
 - sanitized failure reason codes with no stderr/credentials/connection strings
-- Python/Ruff/Pytest and Cloudflare unit/typecheck CI green
+- bounded node health history sampled at most every five minutes with seven-day retention
+- authenticated health-history read endpoint
+- observation-only operational alerts for availability, resource pressure, and Odoo/PostgreSQL service state
+- local D1 migration verification in CI
+- Python/Ruff/Pytest and Cloudflare unit/typecheck/migration CI green
 
-Remaining:
-- deploy Phase 2 D1 migration/API to the temporary canonical Worker
-- validate metadata + runtime/database inventory on one real NON-PRODUCTION node
-- track node health history
-- surface failures and operational alerts
+Remaining gate:
+- deploy Phase 2 migrations/API to the temporary canonical Worker
+- validate metadata, runtime/database inventory, health history and alerts on one real NON-PRODUCTION Linux node
 
 Gate:
 - inventory is reliable on a non-production server
