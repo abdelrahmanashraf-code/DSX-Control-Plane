@@ -20,6 +20,7 @@ def test_collect_node_metrics_has_expected_safe_fields() -> None:
         "disk_percent",
         "boot_time",
         "services",
+        "runtime_inventory",
     }
 
     assert expected.issubset(payload)
@@ -28,3 +29,4 @@ def test_collect_node_metrics_has_expected_safe_fields() -> None:
     assert payload["disk_total_bytes"] > 0
     assert isinstance(payload["services"]["odoo"]["running"], bool)
     assert isinstance(payload["services"]["postgresql"]["running"], bool)
+    assert payload["runtime_inventory"]["collection_mode"] == "read_only_local"
