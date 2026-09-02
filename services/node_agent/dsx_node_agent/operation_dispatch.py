@@ -6,7 +6,7 @@ import socket
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import Any
 
 from dsx_node_agent.operations import (
     ClaimedOperation,
@@ -42,7 +42,7 @@ class CleanupClaimedOperation:
     payload: CleanupEnvironmentPayload
 
 
-AnyClaimedOperation: TypeAlias = ClaimedOperation | CleanupClaimedOperation
+type AnyClaimedOperation = ClaimedOperation | CleanupClaimedOperation
 
 
 def _string(value: Any, *, max_length: int, field: str) -> str:
