@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler d1 execute DB --remote --file=migrations/0001_phase1_nodes.sql --yes && wrangler deploy",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "test": "node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
