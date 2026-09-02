@@ -34,3 +34,18 @@ Each active node can carry:
 - `reserved_disk_gb`: disk reserved from placement calculations
 
 Metadata changes use an authenticated admin endpoint and emit `node.metadata.updated` audit events.
+
+## Runtime inventory implementation
+
+The Node Agent heartbeat now includes a bounded `runtime_inventory` object inside the existing metrics payload.
+
+It reports only:
+
+- whether Odoo/PostgreSQL processes are present and their process counts
+- best-effort Odoo/PostgreSQL version strings from fixed local `--version` probes
+- PostgreSQL server version when a local read-only inventory query is allowed
+- visible non-template database names and sizes, capped at 500 databases
+
+The PostgreSQL inventory uses a fixed `psql` argument list with `--no-password`, `-X`, a sanitized environment, a fixed SQL statement, output limits, a short timeout, and a five-minute cache. It never invokes a shell and never returns stderr, passwords, DSNs, config files, environment variables, or connection strings.
+
+If PostgreSQL access is unavailable, the Agent returns only a bounded reason code such as `postgresql_access_unavailable`; it does not return the underlying authentication or connection error.
