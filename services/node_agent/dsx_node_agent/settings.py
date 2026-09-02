@@ -34,6 +34,11 @@ class AgentSettings(BaseSettings):
     request_timeout_seconds: float = Field(default=10.0, ge=2.0, le=60.0)
     agent_version: str = Field(default="0.1.0")
 
+    # Typed remote operations are deliberately opt-in. Phase 3 enables this only on the
+    # non-production provisioning node after the bounded executor is ready.
+    enable_operations: bool = Field(default=False)
+    operation_poll_seconds: int = Field(default=30, ge=10, le=300)
+
     @property
     def base_url(self) -> str:
         return self.control_plane_url.rstrip("/")
