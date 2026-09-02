@@ -37,7 +37,8 @@ def test_phase3_provisioner_is_local_only_and_hardened() -> None:
     assert "User=root" in service
     assert "Group=dsx-agent" in service
     assert "RestrictAddressFamilies=AF_UNIX" in service
-    assert "NoNewPrivileges=true" in service
+    assert "NoNewPrivileges=false" in service
+    assert "RestrictSUIDSGID=true" in service
     assert "ProtectSystem=strict" in service
     assert "PrivateDevices=true" in service
     assert "CapabilityBoundingSet=" in service
