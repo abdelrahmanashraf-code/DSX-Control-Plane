@@ -109,7 +109,7 @@ class CleanupEngine:
         self.provisioning = provisioning
 
     def _read_full_marker(self, database_name: str) -> tuple[str, str, str] | None:
-        result = self.provisioning._run_postgres(  # noqa: SLF001 - same privilege boundary.
+        result = self.provisioning._run_postgres(
             [
                 _PSQL,
                 "-X",
@@ -135,7 +135,7 @@ class CleanupEngine:
         return parts[0], parts[1], parts[2]
 
     def _database_owner(self, database_name: str) -> str | None:
-        result = self.provisioning._run_postgres(  # noqa: SLF001 - same privilege boundary.
+        result = self.provisioning._run_postgres(
             [
                 _PSQL,
                 "-X",
@@ -188,7 +188,7 @@ class CleanupEngine:
             raise ProvisionerError("cleanup_source_database_blocked")
         if not request.database_name.startswith(f"{profile.database_prefix}_"):
             raise ProvisionerError("database_prefix_mismatch")
-        if not self.provisioning._database_exists(request.database_name):  # noqa: SLF001
+        if not self.provisioning._database_exists(request.database_name):
             raise ProvisionerError("cleanup_database_missing")
         if self._database_owner(request.database_name) != profile.database_owner:
             raise ProvisionerError("cleanup_database_owner_mismatch")
@@ -214,7 +214,7 @@ class CleanupEngine:
         except OSError as exc:
             raise ProvisionerError("cleanup_filestore_quarantine_failed") from exc
 
-        dropped = self.provisioning._run_postgres(  # noqa: SLF001 - fixed binary and safe DB name.
+        dropped = self.provisioning._run_postgres(
             [_DROPDB, "--if-exists", "--force", request.database_name],
             timeout=60,
         )
@@ -224,7 +224,7 @@ class CleanupEngine:
             except OSError:
                 pass
             raise ProvisionerError("cleanup_database_drop_failed")
-        if self.provisioning._database_exists(request.database_name):  # noqa: SLF001
+        if self.provisioning._database_exists(request.database_name):
             try:
                 quarantine.rename(target)
             except OSError:
