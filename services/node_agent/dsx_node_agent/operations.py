@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
+import socket
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 
@@ -46,6 +49,8 @@ _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SAFE_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$")
 _SAFE_DATABASE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 _SAFE_MODULE = re.compile(r"^[A-Za-z0-9_]{1,120}$")
+_SAFE_CODE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,119}$")
+_MAX_LOCAL_RESPONSE_BYTES = 8 * 1024
 
 
 def _string(value: Any, *, max_length: int, field: str) -> str:
@@ -127,6 +132,8 @@ def parse_claimed_operation(response_payload: Any) -> ClaimedOperation | None:
     )
 
     tenant_id = _string(raw_payload["tenant_id"], max_length=64, field="tenant_id")
+    if not _SAFE_ID.fullmatch(tenant_id):
+        raise OperationProtocolError("invalid_tenant_id")
     tenant_slug = _string(raw_payload["tenant_slug"], max_length=64, field="tenant_slug").lower()
     if len(tenant_slug) < 2 or not _SAFE_SLUG.fullmatch(tenant_slug):
         raise OperationProtocolError("invalid_tenant_slug")
@@ -184,12 +191,73 @@ def parse_claimed_operation(response_payload: Any) -> ClaimedOperation | None:
     )
 
 
-def execute_operation(operation: ClaimedOperation) -> OperationExecutionResult:
-    """Fail closed until the Phase 3 provisioning executor is explicitly implemented.
+def _local_request(operation: ClaimedOperation) -> dict[str, Any]:
+    payload = operation.payload
+    return {
+        "operation_id": operation.operation_id,
+        "type": operation.operation_type,
+        "payload": {
+            "tenant_id": payload.tenant_id,
+            "tenant_slug": payload.tenant_slug,
+            "sector": payload.sector,
+            "environment_kind": payload.environment_kind,
+            "template_id": payload.template_id,
+            "template_version": payload.template_version,
+            "odoo_major": payload.odoo_major,
+            "database_name": payload.database_name,
+            "modules": list(payload.modules),
+        },
+    }
 
-    Stage B proves the authenticated typed-operation channel. The real database/filestore
-    executor is Stage C and is intentionally not hidden behind arbitrary shell execution.
-    """
+
+def _parse_local_result(value: Any, expected_database: str) -> OperationExecutionResult:
+    if not isinstance(value, dict):
+        raise OperationProtocolError("invalid_local_provisioner_response")
+    state = value.get("state")
+    if state == "ready":
+        _require_exact_keys(value, {"state", "database_name"}, field="local_ready_response")
+        database_name = _string(value["database_name"], max_length=63, field="database_name")
+        if database_name != expected_database:
+            raise OperationProtocolError("local_database_name_mismatch")
+        return OperationExecutionResult(state="ready", database_name=database_name)
+    if state == "failed":
+        _require_exact_keys(value, {"state", "error_code"}, field="local_failed_response")
+        error_code = _string(value["error_code"], max_length=120, field="error_code")
+        if not _SAFE_CODE.fullmatch(error_code):
+            raise OperationProtocolError("invalid_local_error_code")
+        return OperationExecutionResult(state="failed", error_code=error_code)
+    raise OperationProtocolError("invalid_local_provisioner_state")
+
+
+def execute_operation(
+    operation: ClaimedOperation,
+    *,
+    provisioner_socket: Path | None = None,
+    timeout_seconds: float = 1800.0,
+) -> OperationExecutionResult:
     if operation.operation_type != _ALLOWED_OPERATION_TYPE:
         return OperationExecutionResult(state="failed", error_code="unsupported_operation_type")
-    return OperationExecutionResult(state="failed", error_code="provisioning_executor_not_ready")
+    if provisioner_socket is None:
+        return OperationExecutionResult(state="failed", error_code="provisioning_executor_not_ready")
+
+    encoded = json.dumps(_local_request(operation), separators=(",", ":")).encode("utf-8") + b"\n"
+    if len(encoded) > 16 * 1024:
+        return OperationExecutionResult(state="failed", error_code="local_request_too_large")
+
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(timeout_seconds)
+            client.connect(str(provisioner_socket))
+            client.sendall(encoded)
+            with client.makefile("rb") as stream:
+                raw = stream.readline(_MAX_LOCAL_RESPONSE_BYTES + 1)
+    except (OSError, TimeoutError):
+        return OperationExecutionResult(state="failed", error_code="local_provisioner_unavailable")
+
+    if len(raw) > _MAX_LOCAL_RESPONSE_BYTES or not raw.endswith(b"\n"):
+        return OperationExecutionResult(state="failed", error_code="local_provisioner_protocol_error")
+    try:
+        value = json.loads(raw.decode("utf-8"))
+        return _parse_local_result(value, operation.payload.database_name)
+    except (UnicodeDecodeError, json.JSONDecodeError, OperationProtocolError):
+        return OperationExecutionResult(state="failed", error_code="local_provisioner_protocol_error")
