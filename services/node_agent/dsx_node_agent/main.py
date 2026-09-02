@@ -9,7 +9,11 @@ import httpx
 
 from dsx_node_agent.client import ControlPlaneClient
 from dsx_node_agent.metrics import collect_node_metrics
-from dsx_node_agent.operations import OperationProtocolError, execute_operation, parse_claimed_operation
+from dsx_node_agent.operations import (
+    OperationProtocolError,
+    execute_operation,
+    parse_claimed_operation,
+)
 from dsx_node_agent.settings import AgentSettings
 from dsx_node_agent.state import NodeIdentity, load_identity
 
