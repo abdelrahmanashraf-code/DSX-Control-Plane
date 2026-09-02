@@ -49,3 +49,7 @@ It reports only:
 The PostgreSQL inventory uses a fixed `psql` argument list with `--no-password`, `-X`, a sanitized environment, a fixed SQL statement, output limits, a short timeout, and a five-minute cache. It never invokes a shell and never returns stderr, passwords, DSNs, config files, environment variables, or connection strings.
 
 If PostgreSQL access is unavailable, the Agent returns only a bounded reason code such as `postgresql_access_unavailable`; it does not return the underlying authentication or connection error.
+
+## Verification
+
+CI covers the runtime and database inventory safety boundaries. The current Python job passes Ruff + Pytest, and the Cloudflare worker job passes unit tests + TypeScript typecheck. Real-node validation remains restricted to a NON-PRODUCTION server.
