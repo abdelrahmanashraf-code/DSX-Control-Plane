@@ -10,6 +10,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
     "test": "node --test test/*.test.mjs",
+    "test:migrations": "wrangler d1 migrations apply DB --local",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
