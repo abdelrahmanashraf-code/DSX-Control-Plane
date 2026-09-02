@@ -11,11 +11,11 @@ DSX Control Plane is the operational SaaS platform for DSX POS. It separates cus
 
 Permanent target: Next.js/React + FastAPI + PostgreSQL + Redis/worker on a dedicated DSX management server behind Cloudflare.
 
-For early Phase 1 development, a temporary Cloudflare Worker + D1 adapter is used so the Node Agent contract can be proven before the management VPS is introduced.
+For early development, a temporary Cloudflare Worker + D1 adapter is used so the Node Agent contract can be proven before the management VPS is introduced.
 
 ## Phase 1 status
 
-The first end-to-end non-production node test is working:
+The complete local/laptop non-production acceptance flow is proven:
 
 - Cloudflare Worker + D1 live
 - admin API authentication working
@@ -27,12 +27,27 @@ The first end-to-end non-production node test is working:
 - continuous online heartbeat verified
 - online -> stale -> offline detection verified
 - offline -> online recovery verified
+- node revocation rejects the old Agent credential with HTTP 401
+- audit events verified for token creation, enrollment and revocation
 
-Remaining before the Phase 1 deployment gate closes:
+Only one Phase 1 gate item remains: repeat the safe flow on one real NON-PRODUCTION Linux server.
 
-- revoke the test node and prove its existing credential can no longer heartbeat
-- verify audit events
-- repeat the flow on one real non-production Linux server
+## Phase 2 status
+
+Node management and read-only inventory work is in progress.
+
+Implemented so far:
+
+- node roles, pools, labels and placement capacity metadata
+- authenticated node metadata update with audit logging
+- read-only Odoo/PostgreSQL process discovery
+- fixed local version probes without shell execution
+- cached read-only PostgreSQL database inventory with database names and sizes only
+- bounded outputs and sanitized failure codes
+- no passwords, DSNs, config contents, environment dumps or raw PostgreSQL stderr returned
+- Python/Ruff/Pytest and Cloudflare unit/typecheck CI coverage remains green
+
+Remaining Phase 2 work includes deployment/validation on a real NON-PRODUCTION node, health history and operational alerts.
 
 ## Repository layout
 
@@ -45,9 +60,9 @@ Remaining before the Phase 1 deployment gate closes:
 
 ## Safety boundaries
 
-Phase 1 is intentionally read-only from the node-management perspective. There is no arbitrary remote shell endpoint and no production database create/delete, restart, deploy, backup, restore, billing, or subscription enforcement operation in this gate.
+There is no arbitrary remote shell endpoint. Phase 1 and Phase 2 inventory work does not create/delete customer databases, restart Odoo, deploy updates, or return secrets from nodes.
 
-Secrets such as Cloudflare tokens, admin tokens, enrollment tokens, and Agent credentials must never be committed or pasted into issues/chat.
+Secrets such as Cloudflare tokens, admin tokens, enrollment tokens, Agent credentials, passwords and connection strings must never be committed or pasted into issues/chat.
 
 ## Project direction
 
@@ -64,4 +79,4 @@ The implementation sequence is intentionally fixed:
 9. release management
 10. gradual CloudPepper exit
 
-See `docs/ROADMAP.md` for the phase gates and `docs/ARCHITECTURE.md` for the detailed system design.
+See `docs/ROADMAP.md` for the phase gates, `docs/ARCHITECTURE.md` for the detailed system design, and `docs/PHASE2_NODE_INVENTORY.md` for the inventory safety contract.
