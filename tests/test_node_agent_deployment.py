@@ -14,14 +14,18 @@ def test_node_agent_service_allows_local_postgresql_without_opening_listener() -
 
 
 def test_postgresql_inventory_role_is_passwordless_and_read_only() -> None:
-    sql = Path("deploy/node-agent/postgresql-readonly.sql").read_text().upper()
+    raw_sql = Path("deploy/node-agent/postgresql-readonly.sql").read_text()
+    sql = raw_sql.upper()
+    executable_sql = "\n".join(
+        line for line in sql.splitlines() if not line.lstrip().startswith("--")
+    )
 
-    assert 'CREATE ROLE "DSX-AGENT"' in sql
-    assert "NOSUPERUSER" in sql
-    assert "NOCREATEDB" in sql
-    assert "NOCREATEROLE" in sql
-    assert "NOREPLICATION" in sql
-    assert 'GRANT PG_READ_ALL_STATS TO "DSX-AGENT"' in sql
-    assert "PASSWORD" not in sql
-    assert "CREATE DATABASE" not in sql
-    assert "DROP DATABASE" not in sql
+    assert 'CREATE ROLE "DSX-AGENT"' in executable_sql
+    assert "NOSUPERUSER" in executable_sql
+    assert "NOCREATEDB" in executable_sql
+    assert "NOCREATEROLE" in executable_sql
+    assert "NOREPLICATION" in executable_sql
+    assert 'GRANT PG_READ_ALL_STATS TO "DSX-AGENT"' in executable_sql
+    assert "PASSWORD" not in executable_sql
+    assert "CREATE DATABASE" not in executable_sql
+    assert "DROP DATABASE" not in executable_sql
