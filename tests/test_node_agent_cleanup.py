@@ -1,5 +1,3 @@
-import pytest
-
 from dsx_node_agent.operation_dispatch import (
     CleanupClaimedOperation,
     execute_any_operation,
@@ -8,6 +6,7 @@ from dsx_node_agent.operation_dispatch import (
 from dsx_node_agent.operations import OperationProtocolError
 from dsx_node_agent.provisioner import ProvisionerError
 from dsx_node_agent.provisioner_service import parse_cleanup_request
+import pytest
 
 
 def valid_cleanup_claim() -> dict:
