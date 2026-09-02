@@ -47,6 +47,18 @@ def collect_node_metrics() -> dict[str, Any]:
         "disk_total_bytes": disk.total,
         "disk_free_bytes": disk.free,
         "disk_percent": disk.percent,
+        # Keep the original flat fields for compatibility while also exposing
+        # the stable nested capacity shape consumed by Control Plane placement.
+        "memory": {
+            "total_bytes": memory.total,
+            "available_bytes": memory.available,
+            "percent": memory.percent,
+        },
+        "disk": {
+            "total_bytes": disk.total,
+            "free_bytes": disk.free,
+            "percent": disk.percent,
+        },
         "boot_time": datetime.fromtimestamp(psutil.boot_time(), tz=UTC).isoformat(),
         "services": {
             "odoo": {"running": _service_process_running("odoo")},
