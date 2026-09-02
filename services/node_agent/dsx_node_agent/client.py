@@ -38,17 +38,62 @@ class ControlPlaneClient:
         save_identity(self.settings.agent_state_file, identity)
         return identity
 
+    @staticmethod
+    def _agent_headers(identity: NodeIdentity) -> dict[str, str]:
+        return {"Authorization": f"Bearer {identity.agent_token}"}
+
     def heartbeat(self, identity: NodeIdentity) -> dict[str, Any]:
         metrics = collect_node_metrics()
         response = httpx.post(
             f"{self.settings.base_url}/v1/nodes/{identity.node_id}/heartbeat",
-            headers={"Authorization": f"Bearer {identity.agent_token}"},
+            headers=self._agent_headers(identity),
             json={
                 "observed_at": metrics["observed_at"],
                 "hostname": metrics["hostname"],
                 "agent_version": self.settings.agent_version,
                 "metrics": metrics,
             },
+            timeout=self.settings.request_timeout_seconds,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data if isinstance(data, dict) else {"status": "accepted"}
+
+    def claim_operation(self, identity: NodeIdentity) -> dict[str, Any]:
+        response = httpx.post(
+            f"{self.settings.base_url}/v1/nodes/{identity.node_id}/operations/claim",
+            headers=self._agent_headers(identity),
+            timeout=self.settings.request_timeout_seconds,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict):
+            raise RuntimeError("invalid_operation_claim_response")
+        return data
+
+    def report_operation_result(
+        self,
+        identity: NodeIdentity,
+        *,
+        operation_id: str,
+        lease_token: str,
+        state: str,
+        error_code: str | None = None,
+        database_name: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "lease_token": lease_token,
+            "state": state,
+        }
+        if error_code is not None:
+            payload["error_code"] = error_code
+        if database_name is not None:
+            payload["database_name"] = database_name
+
+        response = httpx.post(
+            f"{self.settings.base_url}/v1/nodes/{identity.node_id}/operations/{operation_id}/result",
+            headers=self._agent_headers(identity),
+            json=payload,
             timeout=self.settings.request_timeout_seconds,
         )
         response.raise_for_status()
