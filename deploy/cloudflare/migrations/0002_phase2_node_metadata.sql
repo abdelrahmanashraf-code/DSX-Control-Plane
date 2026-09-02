@@ -1,0 +1,9 @@
+ALTER TABLE nodes ADD COLUMN role TEXT NOT NULL DEFAULT 'odoo-postgres';
+ALTER TABLE nodes ADD COLUMN pool TEXT NOT NULL DEFAULT 'default';
+ALTER TABLE nodes ADD COLUMN labels TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE nodes ADD COLUMN max_tenants INTEGER;
+ALTER TABLE nodes ADD COLUMN reserved_memory_mb INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE nodes ADD COLUMN reserved_disk_gb INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_nodes_pool ON nodes (pool);
+CREATE INDEX IF NOT EXISTS idx_nodes_role ON nodes (role);
