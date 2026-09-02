@@ -11,20 +11,19 @@ import httpx
 
 from dsx_node_agent.client import ControlPlaneClient
 from dsx_node_agent.metrics import collect_node_metrics
-from dsx_node_agent.operations import (
-    ClaimedOperation,
-    OperationExecutionResult,
-    OperationProtocolError,
-    execute_operation,
-    parse_claimed_operation,
+from dsx_node_agent.operation_dispatch import (
+    AnyClaimedOperation,
+    execute_any_operation,
+    parse_any_claimed_operation,
 )
+from dsx_node_agent.operations import OperationExecutionResult, OperationProtocolError
 from dsx_node_agent.settings import AgentSettings
 from dsx_node_agent.state import NodeIdentity, load_identity
 
 
 @dataclass
 class ActiveOperation:
-    operation: ClaimedOperation
+    operation: AnyClaimedOperation
     future: Future[OperationExecutionResult]
     next_lease_renewal: float
     result: OperationExecutionResult | None = None
@@ -46,7 +45,7 @@ def _start_one_operation(
     settings: AgentSettings,
     executor: ThreadPoolExecutor,
 ) -> ActiveOperation | None:
-    claimed = parse_claimed_operation(client.claim_operation(identity))
+    claimed = parse_any_claimed_operation(client.claim_operation(identity))
     if claimed is None:
         return None
 
@@ -64,7 +63,7 @@ def _start_one_operation(
 
     socket_path = settings.provisioner_socket if settings.enable_provisioning_execution else None
     future = executor.submit(
-        execute_operation,
+        execute_any_operation,
         claimed,
         provisioner_socket=socket_path,
         timeout_seconds=settings.provisioner_timeout_seconds,
