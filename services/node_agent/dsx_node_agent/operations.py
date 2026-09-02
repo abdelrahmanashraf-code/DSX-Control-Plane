@@ -103,7 +103,7 @@ def parse_claimed_operation(response_payload: Any) -> ClaimedOperation | None:
         operation["lease_expires_at"], max_length=64, field="lease_expires_at"
     )
     try:
-        datetime.fromisoformat(lease_expires_at.replace("Z", "+00:00"))
+        datetime.fromisoformat(lease_expires_at)
     except ValueError as exc:
         raise OperationProtocolError("invalid_lease_expires_at") from exc
 
