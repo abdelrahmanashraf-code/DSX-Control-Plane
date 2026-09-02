@@ -19,7 +19,7 @@ Gate:
 
 ## Phase 1 — Control Plane core + first test node
 
-Status: in progress; local end-to-end node flow proven.
+Status: local acceptance PASS; one real non-production server repeat remains.
 
 Deliverables:
 - FastAPI foundation for the permanent management service
@@ -39,16 +39,15 @@ Verified on `DSX-TEST-01`:
 - D1/Worker health
 - authenticated admin node list
 - one-time enrollment
-- accepted heartbeat
-- continuous heartbeat
-- node shown online with CPU/RAM/disk and Odoo/PostgreSQL state
+- accepted and continuous heartbeat
+- CPU/RAM/disk plus Odoo/PostgreSQL state
 - online -> stale -> offline transition
 - offline -> online recovery after Agent restart
+- revocation rejects old Agent credential with HTTP 401
+- audit visibility for token creation, enrollment, and revocation
 
-Remaining gate items:
-- verify revocation rejects the existing Agent credential
-- verify audit-event visibility for token creation, enrollment, and revocation
-- repeat enrollment/heartbeat flow on one NON-PRODUCTION server node
+Remaining gate item:
+- repeat the safe enrollment/heartbeat flow on one real NON-PRODUCTION Linux server node
 
 No production customer node is part of the Phase 1 gate.
 
@@ -56,10 +55,19 @@ No production customer node is part of the Phase 1 gate.
 
 Goal: understand and safely manage the infrastructure that hosts Odoo without creating customer databases yet.
 
-Planned capabilities:
-- register multiple nodes
-- node labels/roles/pools
-- capacity and placement inputs
+Status: started in code while the external Phase 1 server gate is pending.
+
+Implemented and unit-tested:
+- node role (`odoo-postgres`, `odoo`, `postgresql`)
+- node pool assignment
+- bounded node labels
+- placement capacity inputs (`max_tenants`, reserved RAM, reserved disk)
+- authenticated admin metadata update endpoint
+- audit event for node metadata changes
+- D1 migration tracking for Phase 2 schema
+
+Next capabilities:
+- validate metadata on a real non-production server
 - discover Odoo runtime information
 - discover PostgreSQL/database inventory using read-only typed operations
 - track node health history
