@@ -34,10 +34,13 @@ class AgentSettings(BaseSettings):
     request_timeout_seconds: float = Field(default=10.0, ge=2.0, le=60.0)
     agent_version: str = Field(default="0.1.0")
 
-    # Typed remote operations are deliberately opt-in. Phase 3 enables this only on the
-    # non-production provisioning node after the bounded executor is ready.
+    # Remote typed-operation polling and local privileged execution use separate gates.
+    # Both remain false until the Phase 3 non-production acceptance procedure enables them.
     enable_operations: bool = Field(default=False)
     operation_poll_seconds: int = Field(default=30, ge=10, le=300)
+    enable_provisioning_execution: bool = Field(default=False)
+    provisioner_socket: Path = Field(default=Path("/run/dsx-provisioner/provisioner.sock"))
+    provisioner_timeout_seconds: float = Field(default=1800.0, ge=30.0, le=3600.0)
 
     @property
     def base_url(self) -> str:
