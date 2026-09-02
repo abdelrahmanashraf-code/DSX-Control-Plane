@@ -45,5 +45,7 @@ jobs:
           node-version: '22'
       - name: Install
         run: npm install
+      - name: Unit tests
+        run: npm test
       - name: Typecheck
         run: npm run typecheck
