@@ -1,4 +1,4 @@
-import { edgeJson, isEdgeAdmin, parseJsonObject } from "./edgeAdmin";
+import { edgeJson, isEdgeAdmin, parseJsonObject } from "./edgeAdmin.ts";
 
 interface Env {
   DB: D1Database;
