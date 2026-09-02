@@ -18,14 +18,19 @@ sudo useradd --system --home /nonexistent --shell /usr/sbin/nologin dsx-agent ||
 sudo mkdir -p /opt/dsx-control-plane
 sudo chown "$USER":"$USER" /opt/dsx-control-plane
 
-git clone https://github.com/abdelrahmanashraf-code/DSX-Control-Plane.git /opt/dsx-control-plane
+if [ -d /opt/dsx-control-plane/.git ]; then
+  git -C /opt/dsx-control-plane pull --ff-only origin main
+else
+  git clone https://github.com/abdelrahmanashraf-code/DSX-Control-Plane.git /opt/dsx-control-plane
+fi
+
 cd /opt/dsx-control-plane
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install .
 ```
 
-If the repository is already cloned, do not clone it again. Remove only the failed `.venv`, install `python3.12-venv`, and recreate the virtual environment.
+If a previous virtual environment is broken, remove only `/opt/dsx-control-plane/.venv`, install `python3.12-venv`, and recreate it. Do not remove the repository, node identity, customer data, or PostgreSQL data.
 
 Create `/etc/dsx-node-agent.env` owned by root and mode `0600`:
 
@@ -55,6 +60,7 @@ If the PostgreSQL host does not use compatible local peer authentication, do not
 2. Run enrollment once without saving the token to `/etc/dsx-node-agent.env`:
 
 ```bash
+sudo install -d -o dsx-agent -g dsx-agent -m 0700 /var/lib/dsx-node-agent
 sudo -u dsx-agent env \
   DSX_CONTROL_PLANE_URL=https://<control-plane-host> \
   DSX_NODE_NAME=DSX-TEST-SERVER-01 \
