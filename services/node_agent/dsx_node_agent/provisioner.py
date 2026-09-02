@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: I001
+
 import argparse
 import grp
 import json
@@ -145,8 +147,6 @@ def parse_request(value: Any) -> ProvisionRequest:
     environment_kind = _string(
         payload["environment_kind"], field="environment_kind", max_length=32
     ).lower()
-    # Phase 3 is deliberately test-only. Trial/production stay blocked locally even if the
-    # remote Control Plane is misconfigured or compromised.
     if environment_kind != "test":
         raise ProvisionerError("non_test_environment_blocked")
 
@@ -618,7 +618,7 @@ class _ProvisionRequestHandler(socketserver.StreamRequestHandler):
             self._write({"state": "failed", "error_code": "invalid_json"})
         except ProvisionerError as exc:
             self._write({"state": "failed", "error_code": exc.code})
-        except Exception:
+        except Exception:  # noqa: BLE001 - privilege boundary must never leak an exception.
             self._write({"state": "failed", "error_code": "internal_provisioner_error"})
 
     def _write(self, value: dict[str, str]) -> None:
