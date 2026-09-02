@@ -1,4 +1,4 @@
-import { canTransitionProvisioningState, type ProvisioningState } from "./provisioning";
+import { canTransitionProvisioningState, type ProvisioningState } from "./provisioning.ts";
 
 interface Env {
   DB: D1Database;
