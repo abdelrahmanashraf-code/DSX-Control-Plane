@@ -1,3 +1,5 @@
+import { edgeJson, isEdgeAdmin } from "./edgeAdmin";
+
 interface Env {
   DB: D1Database;
   ADMIN_API_TOKEN: string;
@@ -13,37 +15,6 @@ type HealthSampleRow = {
   database_count: number | null;
 };
 
-const encoder = new TextEncoder();
-
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-    },
-  });
-}
-
-function bearerToken(request: Request): string {
-  const header = request.headers.get("authorization") || "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : "";
-}
-
-async function sha256(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function isAdmin(request: Request, env: Env): Promise<boolean> {
-  const supplied = bearerToken(request);
-  if (!supplied || !env.ADMIN_API_TOKEN) return false;
-  return (await sha256(supplied)) === (await sha256(env.ADMIN_API_TOKEN));
-}
-
 export function parseHealthHistoryLimit(value: string | null): number {
   if (!value) return 72;
   const parsed = Number(value);
@@ -56,12 +27,12 @@ export async function listNodeHealthHistory(
   env: Env,
   nodeId: string,
 ): Promise<Response> {
-  if (!(await isAdmin(request, env))) return json({ error: "unauthorized" }, 401);
+  if (!(await isEdgeAdmin(request, env))) return edgeJson({ error: "unauthorized" }, 401);
 
   const node = await env.DB.prepare("SELECT id FROM nodes WHERE id = ? LIMIT 1")
     .bind(nodeId)
     .first<{ id: string }>();
-  if (!node) return json({ error: "node_not_found" }, 404);
+  if (!node) return edgeJson({ error: "node_not_found" }, 404);
 
   const url = new URL(request.url);
   const limit = parseHealthHistoryLimit(url.searchParams.get("limit"));
@@ -76,7 +47,7 @@ export async function listNodeHealthHistory(
     .bind(nodeId, limit)
     .all<HealthSampleRow>();
 
-  return json({
+  return edgeJson({
     node_id: nodeId,
     sample_interval_seconds: 300,
     retention_days: 7,
