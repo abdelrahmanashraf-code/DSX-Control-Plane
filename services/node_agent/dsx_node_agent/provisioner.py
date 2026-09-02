@@ -7,14 +7,13 @@ import os
 import pwd
 import re
 import shutil
-import socket
 import socketserver
 import stat
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 
 _MAX_REQUEST_BYTES = 16 * 1024
@@ -136,6 +135,8 @@ def parse_request(value: Any) -> ProvisionRequest:
     )
 
     tenant_id = _string(payload["tenant_id"], field="tenant_id", max_length=64)
+    if not _SAFE_ID.fullmatch(tenant_id):
+        raise ProvisionerError("invalid_tenant_id")
     tenant_slug = _string(payload["tenant_slug"], field="tenant_slug", max_length=64).lower()
     sector = _string(payload["sector"], field="sector", max_length=32).lower()
     if sector not in _ALLOWED_SECTORS:
@@ -314,6 +315,8 @@ class ProvisioningEngine:
         *,
         timeout: int = 600,
         capture_stdout: bool = False,
+        stdin_handle: BinaryIO | None = None,
+        stdout_handle: BinaryIO | None = None,
     ) -> CommandResult:
         command = [
             _RUNUSER,
@@ -322,20 +325,27 @@ class ProvisioningEngine:
             "--",
             *argv,
         ]
+        stdout_target: Any
+        if stdout_handle is not None:
+            stdout_target = stdout_handle
+        elif capture_stdout:
+            stdout_target = subprocess.PIPE
+        else:
+            stdout_target = subprocess.DEVNULL
         try:
             completed = subprocess.run(
                 command,
                 check=False,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE if capture_stdout else subprocess.DEVNULL,
+                stdin=stdin_handle if stdin_handle is not None else subprocess.DEVNULL,
+                stdout=stdout_target,
                 stderr=subprocess.DEVNULL,
-                text=True,
+                text=capture_stdout and stdout_handle is None,
                 timeout=timeout,
                 env={"PATH": "/usr/bin:/bin", "PGCONNECT_TIMEOUT": "5"},
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise ProvisionerError("postgres_command_unavailable") from exc
-        stdout = completed.stdout[:4096] if completed.stdout else ""
+        stdout = completed.stdout[:4096] if isinstance(completed.stdout, str) else ""
         return CommandResult(returncode=completed.returncode, stdout=stdout)
 
     def _database_exists(self, database_name: str) -> bool:
@@ -470,7 +480,6 @@ class ProvisioningEngine:
         root = profile.filestore_root.resolve()
         source = root / profile.source_database
         target = root / request.database_name
-        created = False
 
         if target.exists():
             if not target.is_dir():
@@ -484,13 +493,16 @@ class ProvisioningEngine:
                 target.mkdir(parents=False, mode=0o700)
             else:
                 raise ProvisionerError("source_filestore_missing")
-            created = True
             self._chown_tree(target, profile.filestore_user, profile.filestore_group)
+            return True
         except ProvisionerError:
+            if target.exists():
+                shutil.rmtree(target, ignore_errors=True)
             raise
         except OSError as exc:
+            if target.exists():
+                shutil.rmtree(target, ignore_errors=True)
             raise ProvisionerError("filestore_copy_failed") from exc
-        return created
 
     def _drop_database(self, database_name: str) -> None:
         self._run_postgres(
@@ -502,17 +514,18 @@ class ProvisioningEngine:
         self.config.work_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         with tempfile.TemporaryDirectory(prefix="job-", dir=self.config.work_root) as raw_work:
             dump_path = Path(raw_work) / "template.dump"
-            dumped = self._run_postgres(
-                [
-                    _PG_DUMP,
-                    "--format=custom",
-                    "--no-owner",
-                    "--no-privileges",
-                    f"--file={dump_path}",
-                    f"--dbname={profile.source_database}",
-                ],
-                timeout=900,
-            )
+            with dump_path.open("wb") as dump_handle:
+                dumped = self._run_postgres(
+                    [
+                        _PG_DUMP,
+                        "--format=custom",
+                        "--no-owner",
+                        "--no-privileges",
+                        f"--dbname={profile.source_database}",
+                    ],
+                    timeout=900,
+                    stdout_handle=dump_handle,
+                )
             if dumped.returncode != 0:
                 raise ProvisionerError("template_dump_failed")
 
@@ -529,18 +542,20 @@ class ProvisioningEngine:
             if created.returncode != 0:
                 raise ProvisionerError("database_create_failed")
 
-            restored = self._run_postgres(
-                [
-                    _PG_RESTORE,
-                    "--no-owner",
-                    "--no-privileges",
-                    "--exit-on-error",
-                    f"--dbname={request.database_name}",
-                    str(dump_path),
-                ],
-                timeout=1200,
-            )
+            with dump_path.open("rb") as dump_handle:
+                restored = self._run_postgres(
+                    [
+                        _PG_RESTORE,
+                        "--no-owner",
+                        "--no-privileges",
+                        "--exit-on-error",
+                        f"--dbname={request.database_name}",
+                    ],
+                    timeout=1200,
+                    stdin_handle=dump_handle,
+                )
             if restored.returncode != 0:
+                self._drop_database(request.database_name)
                 raise ProvisionerError("database_restore_failed")
 
     def provision(self, request: ProvisionRequest) -> dict[str, str]:
@@ -564,6 +579,7 @@ class ProvisioningEngine:
             marker = self._read_marker(request.database_name)
             if marker != (request.tenant_id, request.template_id):
                 raise ProvisionerError("database_name_conflict")
+            self._prepare_filestore(request, profile)
             self._validate_modules(request)
             return {"state": "ready", "database_name": request.database_name}
 
