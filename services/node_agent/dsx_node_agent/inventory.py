@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import time
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any
 
 import psutil
@@ -63,43 +64,88 @@ def _run_version(binary_names: Iterable[str]) -> str | None:
         if not binary:
             continue
 
-        try:
-            result = subprocess.run(
-                [binary, "--version"],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=3,
-                stdin=subprocess.DEVNULL,
-                env=_safe_env(),
-            )
-        except (OSError, subprocess.SubprocessError):
-            continue
-
-        output = result.stdout.strip() or result.stderr.strip()
-        if output:
-            return _safe_text(output.splitlines()[0])
+        version = _run_version_argv([binary])
+        if version:
+            return version
     return None
 
 
-def _runtime_process_counts() -> dict[str, int]:
+def _run_version_argv(argv_prefix: list[str]) -> str | None:
+    """Run a bounded executable prefix with only the fixed `--version` argument."""
+    if not argv_prefix or len(argv_prefix) > 2:
+        return None
+
+    try:
+        result = subprocess.run(
+            [*argv_prefix, "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3,
+            stdin=subprocess.DEVNULL,
+            env=_safe_env(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    output = result.stdout.strip() or result.stderr.strip()
+    if output:
+        return _safe_text(output.splitlines()[0])
+    return None
+
+
+def _odoo_version_candidate(cmdline: list[str], cwd: str | None) -> list[str] | None:
+    """Build a safe Odoo version probe from a running Python + odoo-bin process."""
+    if len(cmdline) < 2:
+        return None
+
+    interpreter = Path(cmdline[0])
+    script = Path(cmdline[1])
+    if not interpreter.is_absolute() or not interpreter.name.startswith("python"):
+        return None
+    if script.name != "odoo-bin":
+        return None
+
+    if not script.is_absolute():
+        if not cwd:
+            return None
+        script = Path(cwd) / script
+
+    resolved_script = script.resolve(strict=False)
+    if not resolved_script.is_absolute():
+        return None
+
+    return [str(interpreter), str(resolved_script)]
+
+
+def _runtime_process_inventory() -> tuple[dict[str, int], list[list[str]]]:
     counts = {"odoo": 0, "postgresql": 0}
+    odoo_version_candidates: list[list[str]] = []
     odoo_markers = ("odoo", "odoo-bin")
     postgres_markers = ("postgres", "postgresql")
 
-    for process in psutil.process_iter(["name", "cmdline"]):
+    for process in psutil.process_iter(["name", "cmdline", "cwd"]):
         try:
             name = str(process.info.get("name") or "").lower()
-            cmdline = " ".join(process.info.get("cmdline") or []).lower()
+            raw_cmdline = process.info.get("cmdline") or []
+            cmdline = [str(part) for part in raw_cmdline]
+            cmdline_text = " ".join(cmdline).lower()
+            cwd_value = process.info.get("cwd")
+            cwd = str(cwd_value) if cwd_value else None
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
 
-        if any(marker in name or marker in cmdline for marker in odoo_markers):
+        is_odoo = any(marker in name or marker in cmdline_text for marker in odoo_markers)
+        if is_odoo:
             counts["odoo"] += 1
-        if any(marker in name or marker in cmdline for marker in postgres_markers):
+            candidate = _odoo_version_candidate(cmdline, cwd)
+            if candidate and candidate not in odoo_version_candidates and len(odoo_version_candidates) < 3:
+                odoo_version_candidates.append(candidate)
+
+        if any(marker in name or marker in cmdline_text for marker in postgres_markers):
             counts["postgresql"] += 1
 
-    return counts
+    return counts, odoo_version_candidates
 
 
 def _database_inventory_uncached() -> dict[str, Any]:
@@ -196,15 +242,22 @@ def collect_database_inventory(*, force: bool = False) -> dict[str, Any]:
 
 def collect_runtime_inventory() -> dict[str, Any]:
     """Collect bounded, non-secret local runtime inventory for Phase 2."""
-    counts = _runtime_process_counts()
+    counts, odoo_version_candidates = _runtime_process_inventory()
     database_inventory = collect_database_inventory()
+
+    odoo_version = _run_version(("odoo", "odoo-bin"))
+    if odoo_version is None:
+        for candidate in odoo_version_candidates:
+            odoo_version = _run_version_argv(candidate)
+            if odoo_version:
+                break
 
     return {
         "collection_mode": "read_only_local",
         "odoo": {
             "running": counts["odoo"] > 0,
             "process_count": counts["odoo"],
-            "version": _run_version(("odoo", "odoo-bin")),
+            "version": odoo_version,
         },
         "postgresql": {
             "running": counts["postgresql"] > 0,
