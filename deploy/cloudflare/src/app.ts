@@ -3,6 +3,7 @@ import { listNodeHealthHistory } from "./healthHistory";
 import legacyWorker from "./index";
 import { handleNodeOperationRoute } from "./nodeOperations";
 import { handleProvisioningAdminRoute } from "./provisioning";
+import { handleProvisioningRetryRoute } from "./provisioningRetry";
 
 interface Env {
   DB: D1Database;
@@ -29,6 +30,9 @@ export default {
 
     const nodeOperationResponse = await handleNodeOperationRoute(request, env);
     if (nodeOperationResponse) return nodeOperationResponse;
+
+    const retryResponse = await handleProvisioningRetryRoute(request, env);
+    if (retryResponse) return retryResponse;
 
     const provisioningResponse = await handleProvisioningAdminRoute(request, env);
     if (provisioningResponse) return provisioningResponse;
