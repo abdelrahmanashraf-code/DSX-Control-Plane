@@ -2,7 +2,7 @@
 
 ## Phase 0 — Architecture and project rules
 
-Status: complete enough to proceed.
+Status: complete.
 
 Deliverables:
 - project charter
@@ -19,7 +19,7 @@ Gate:
 
 ## Phase 1 — Control Plane core + first test node
 
-Status: local acceptance complete; one real non-production server repeat remains.
+Status: COMPLETE.
 
 Deliverables:
 - FastAPI foundation for the permanent management service
@@ -35,7 +35,7 @@ Deliverables:
 - audit events
 - hardened outbound-only Node Agent service definition
 
-Verified on `DSX-TEST-01`:
+Verified first on `DSX-TEST-01` and repeated successfully on real non-production node `DSX-TEST-SERVER-01`:
 - D1/Worker health
 - authenticated admin node list
 - one-time enrollment
@@ -45,20 +45,17 @@ Verified on `DSX-TEST-01`:
 - online -> stale -> offline transition
 - offline -> online recovery after Agent restart
 - revocation rejects the previous Agent credential with HTTP 401
-- audit events visible for token creation, enrollment, and revocation
+- real-server acceptance completed without production customer changes
 
-Remaining gate item:
-- repeat enrollment/heartbeat flow on one real NON-PRODUCTION server node
-
-No production customer node is part of the Phase 1 gate.
+Gate: PASSED.
 
 ## Phase 2 — Node management and inventory
 
-Status: code implementation complete for the current gate; deployment and real-node validation remain.
+Status: COMPLETE.
 
 Goal: understand and safely manage the infrastructure that hosts Odoo without creating customer databases yet.
 
-Implemented:
+Implemented and validated:
 - node labels/roles/pools
 - capacity and placement inputs
 - authenticated metadata update with audit event
@@ -72,33 +69,51 @@ Implemented:
 - observation-only operational alerts for availability, resource pressure, and Odoo/PostgreSQL service state
 - local D1 migration verification in CI
 - Python/Ruff/Pytest and Cloudflare unit/typecheck/migration CI green
+- real-node inventory validated with PostgreSQL 16.15 and 13 databases
+- metadata update validated on the real node
+- healthy alert state validated
+- `node_stale` warning validated between the stale/offline thresholds
+- `node_offline` critical alert validated after the offline threshold
+- online recovery validated after Agent restart
+- final Agent credential revocation validated; old heartbeat rejected with HTTP 401
 
-Remaining gate:
-- deploy Phase 2 migrations/API to the temporary canonical Worker
-- validate metadata, runtime/database inventory, health history and alerts on one real NON-PRODUCTION Linux node
+Gate: PASSED.
 
-Gate:
-- inventory is reliable on a non-production server
+Safety boundary retained:
 - no arbitrary shell endpoint
-- all typed privileged operations are authenticated and audited
+- no customer database create/delete during Phase 2
+- no secret/config/environment collection
+- observation-only alerts cannot trigger remote actions
 
 ## Phase 3 — Provisioning
+
+Status: CURRENT.
 
 Goal: create a new isolated customer Odoo database automatically from a controlled template.
 
 Planned capabilities:
 - sector templates (restaurant, cafe, retail, supermarket)
 - tenant/database records
-- placement selection
-- database creation
+- placement selection using Phase 2 node metadata/capacity
+- explicit provisioning job model and state machine
+- idempotency keys and safe retries
+- database creation through a narrowly scoped typed operation
 - filestore preparation
 - DSX module installation/configuration
 - domain mapping
-- provisioning jobs with idempotency and retry
+- provisioning logs/events without secrets
 - failure states visible to operators
+- cleanup/rollback for failed test provisioning
+
+Implementation rule:
+- do not add a generic shell/command execution API to the Node Agent
+- every privileged operation must be typed, authenticated, authorized, bounded and audited
+- Phase 3 starts on non-production resources only
 
 Gate:
-- repeated test provisioning is predictable and reversible
+- repeated test provisioning is predictable and idempotent
+- failures are visible and recoverable
+- no arbitrary shell endpoint exists
 - no production rollout before restore capability is proven
 
 ## Phase 4 — Backup and restore
