@@ -48,8 +48,10 @@ Verified capabilities:
 - five-minute health-history sampling with seven-day retention
 - healthy, stale and offline operational alert states validated
 - offline -> online recovery validated
-- revoked Agent credential rejected with HTTP 401
+- final real-node credential revocation validated; old heartbeat rejected with HTTP 401
 - Python/Ruff/Pytest and Cloudflare unit/typecheck/migration CI coverage green
+
+The Phase 1 deployment gate and the Phase 2 node-management gate are closed. The test credential used for acceptance was intentionally revoked at the end of the gate.
 
 ## Current phase — Phase 3: Provisioning
 
