@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from dsx_node_agent.operation_dispatch import (
     CleanupClaimedOperation,
@@ -5,8 +7,13 @@ from dsx_node_agent.operation_dispatch import (
     parse_any_claimed_operation,
 )
 from dsx_node_agent.operations import OperationProtocolError
-from dsx_node_agent.provisioner import ProvisionerError
-from dsx_node_agent.provisioner_service import parse_cleanup_request
+from dsx_node_agent.provisioner import (
+    CommandResult,
+    ProvisionerConfig,
+    ProvisionerError,
+    ProvisionerProfile,
+)
+from dsx_node_agent.provisioner_service import CleanupEngine, parse_cleanup_request
 
 
 def valid_cleanup_claim() -> dict:
@@ -34,6 +41,50 @@ def valid_privileged_cleanup_request() -> dict:
         "type": operation["type"],
         "payload": operation["payload"],
     }
+
+
+def cleanup_config(tmp_path: Path) -> ProvisionerConfig:
+    return ProvisionerConfig(
+        enabled=True,
+        phase="test-only",
+        postgres_os_user="postgres",
+        work_root=tmp_path / "work",
+        profiles={
+            "template-restaurant-v1": ProvisionerProfile(
+                template_id="template-restaurant-v1",
+                source_database="dsx_restaurant_demo_master",
+                database_prefix="dsx_restaurant",
+                database_owner="odoo",
+                filestore_root=tmp_path / "filestore",
+                filestore_user="odoo",
+                filestore_group="odoo",
+                allowed_modules=frozenset(),
+                allow_empty_filestore=False,
+            )
+        },
+    )
+
+
+class MarkerMismatchProvisioning:
+    def __init__(self) -> None:
+        self.drop_calls = 0
+
+    def _database_exists(self, database_name: str) -> bool:
+        return True
+
+    def _run_postgres(self, argv: list[str], **kwargs) -> CommandResult:
+        if argv[0] == "/usr/bin/dropdb":
+            self.drop_calls += 1
+            return CommandResult(returncode=0, stdout="")
+        if "--dbname=postgres" in argv:
+            return CommandResult(returncode=0, stdout="odoo\n")
+        return CommandResult(
+            returncode=0,
+            stdout=(
+                "wrong-tenant\ttemplate-restaurant-v1\t"
+                "94510378-b752-4dab-a4c7-625af6a9b252\n"
+            ),
+        )
 
 
 def test_cleanup_claim_is_strictly_typed() -> None:
@@ -85,3 +136,28 @@ def test_privileged_cleanup_boundary_never_accepts_lease_fields() -> None:
     claim_operation = valid_cleanup_claim()["operation"]
     with pytest.raises(ProvisionerError, match="invalid_request_fields"):
         parse_cleanup_request(claim_operation)
+
+
+def test_cleanup_marker_mismatch_blocks_drop_before_filestore_mutation(tmp_path: Path) -> None:
+    provisioning = MarkerMismatchProvisioning()
+    engine = CleanupEngine(cleanup_config(tmp_path), provisioning)
+    request = parse_cleanup_request(valid_privileged_cleanup_request())
+
+    with pytest.raises(ProvisionerError, match="cleanup_marker_mismatch"):
+        engine.cleanup(request)
+
+    assert provisioning.drop_calls == 0
+    assert not (tmp_path / "filestore").exists()
+
+
+def test_cleanup_source_database_is_never_allowed(tmp_path: Path) -> None:
+    request_payload = valid_privileged_cleanup_request()
+    request_payload["payload"]["database_name"] = "dsx_restaurant_demo_master"
+    request = parse_cleanup_request(request_payload)
+    provisioning = MarkerMismatchProvisioning()
+    engine = CleanupEngine(cleanup_config(tmp_path), provisioning)
+
+    with pytest.raises(ProvisionerError, match="cleanup_source_database_blocked"):
+        engine.cleanup(request)
+
+    assert provisioning.drop_calls == 0
