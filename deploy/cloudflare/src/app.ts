@@ -1,6 +1,7 @@
 import { listOperationalAlerts } from "./alerts";
 import { listNodeHealthHistory } from "./healthHistory";
 import legacyWorker from "./index";
+import { handleNodeOperationRoute } from "./nodeOperations";
 import { handleProvisioningAdminRoute } from "./provisioning";
 
 interface Env {
@@ -8,6 +9,7 @@ interface Env {
   ADMIN_API_TOKEN: string;
   NODE_STALE_SECONDS?: string;
   NODE_OFFLINE_SECONDS?: string;
+  NODE_OPERATION_LEASE_SECONDS?: string;
 }
 
 export default {
@@ -24,6 +26,9 @@ export default {
     if (request.method === "GET" && historyMatch) {
       return await listNodeHealthHistory(request, env, historyMatch[1]);
     }
+
+    const nodeOperationResponse = await handleNodeOperationRoute(request, env);
+    if (nodeOperationResponse) return nodeOperationResponse;
 
     const provisioningResponse = await handleProvisioningAdminRoute(request, env);
     if (provisioningResponse) return provisioningResponse;
