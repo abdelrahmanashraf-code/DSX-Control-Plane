@@ -20,6 +20,15 @@ node --version
 
 Expected: `v22.x` or newer.
 
+The machine running Wrangler must also be authenticated to the correct Cloudflare account before deploy:
+
+```bash
+npx wrangler login
+npx wrangler whoami
+```
+
+Complete the OAuth flow in the browser. Do not paste OAuth codes, Cloudflare API tokens, or Worker secrets into chat, GitHub, or shell history unnecessarily.
+
 ## 1. Create the D1 database
 
 Create one Cloudflare D1 database named:
