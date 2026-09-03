@@ -9,9 +9,10 @@ from pathlib import Path
 import pytest
 from pydantic import SecretStr
 
-import dsx_node_agent.restore_operation as restore_operation
+from dsx_node_agent import restore_operation
 from dsx_node_agent.operation_dispatch import parse_any_claimed_operation
 from dsx_node_agent.operations import OperationProtocolError
+from dsx_node_agent.provisioner import ProvisionerError
 from dsx_node_agent.restore_operation import (
     RestoreClaimedOperation,
     execute_restore_operation,
@@ -19,7 +20,6 @@ from dsx_node_agent.restore_operation import (
     purge_restore_download_local,
 )
 from dsx_node_agent.restore_service import RestoreEngine, parse_restore_request
-from dsx_node_agent.provisioner import ProvisionerError
 from dsx_node_agent.settings import AgentSettings
 
 
@@ -133,7 +133,7 @@ class FakeS3:
     def __init__(self, objects: dict[str, bytes]) -> None:
         self.objects = objects
 
-    def get_object(self, *, Bucket: str, Key: str, **kwargs):  # noqa: N803
+    def get_object(self, *, Bucket: str, Key: str, **kwargs):
         del Bucket, kwargs
         value = self.objects[Key]
         return {"ContentLength": len(value), "Body": io.BytesIO(value)}
