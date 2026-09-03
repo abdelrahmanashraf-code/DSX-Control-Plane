@@ -1,4 +1,5 @@
 import { canTransitionProvisioningState, type ProvisioningState } from "./provisioning.ts";
+import { trialExpiryFrom } from "./trials.ts";
 
 interface Env {
   DB: D1Database;
@@ -200,7 +201,11 @@ async function markExpiredLeases(env: Env, nodeId: string): Promise<void> {
           WHERE id = ? AND state IN ('dispatched', 'running')`,
       ).bind(now, now, row.job_id),
       env.DB.prepare(
-        `UPDATE tenants SET status = 'failed', updated_at = ? WHERE id = ?`,
+        `UPDATE tenants
+            SET status = 'failed',
+                trial_state = CASE WHEN environment_kind = 'trial' THEN 'failed' ELSE trial_state END,
+                updated_at = ?
+          WHERE id = ?`,
       ).bind(now, tenant.tenant_id),
       env.DB.prepare(`DELETE FROM provisioning_operation_leases WHERE job_id = ?`).bind(row.job_id),
       env.DB.prepare(
@@ -394,14 +399,28 @@ async function reportOperationResult(
   ];
 
   if (input.state === "ready") {
+    const trialExpiresAt = trialExpiryFrom(now);
     statements.push(
       env.DB.prepare(
-        `UPDATE tenants SET status = 'ready', database_name = ?, updated_at = ? WHERE id = ?`,
-      ).bind(input.database_name, now, current.tenant_id),
+        `UPDATE tenants
+            SET status = 'ready',
+                database_name = ?,
+                trial_state = CASE WHEN environment_kind = 'trial' THEN 'active' ELSE trial_state END,
+                trial_started_at = CASE WHEN environment_kind = 'trial' THEN COALESCE(trial_started_at, ?) ELSE trial_started_at END,
+                trial_expires_at = CASE WHEN environment_kind = 'trial' THEN ? ELSE trial_expires_at END,
+                updated_at = ?
+          WHERE id = ?`,
+      ).bind(input.database_name, now, trialExpiresAt, now, current.tenant_id),
     );
   } else {
     statements.push(
-      env.DB.prepare(`UPDATE tenants SET status = 'failed', updated_at = ? WHERE id = ?`).bind(now, current.tenant_id),
+      env.DB.prepare(
+        `UPDATE tenants
+            SET status = 'failed',
+                trial_state = CASE WHEN environment_kind = 'trial' THEN 'failed' ELSE trial_state END,
+                updated_at = ?
+          WHERE id = ?`,
+      ).bind(now, current.tenant_id),
     );
   }
 
