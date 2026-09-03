@@ -25,12 +25,18 @@ from dsx_node_agent.operations import (
     execute_operation,
     parse_claimed_operation,
 )
+from dsx_node_agent.restore_operation import (
+    RestoreClaimedOperation,
+    execute_restore_operation,
+    parse_restore_claimed_operation,
+)
 from dsx_node_agent.settings import AgentSettings
 
 _CLEANUP_OPERATION = "cleanup_test_odoo_environment"
 _PROVISION_OPERATION = "provision_odoo_environment"
 _BACKUP_OPERATION = "backup_odoo_environment"
 _BACKUP_UPLOAD_OPERATION = "upload_verify_backup_artifacts"
+_RESTORE_OPERATION = "restore_verified_backup"
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SAFE_DATABASE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 _SAFE_CODE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,119}$")
@@ -56,7 +62,11 @@ class CleanupClaimedOperation:
 
 
 type AnyClaimedOperation = (
-    ClaimedOperation | CleanupClaimedOperation | BackupClaimedOperation | BackupUploadClaimedOperation
+    ClaimedOperation
+    | CleanupClaimedOperation
+    | BackupClaimedOperation
+    | BackupUploadClaimedOperation
+    | RestoreClaimedOperation
 )
 
 
@@ -174,6 +184,8 @@ def parse_any_claimed_operation(response_payload: Any) -> AnyClaimedOperation | 
         return parse_backup_claimed_operation(response_payload)
     if operation_type == _BACKUP_UPLOAD_OPERATION:
         return parse_backup_upload_claimed_operation(response_payload)
+    if operation_type == _RESTORE_OPERATION:
+        return parse_restore_claimed_operation(response_payload)
     raise OperationProtocolError("unsupported_operation_type")
 
 
@@ -247,6 +259,13 @@ def execute_any_operation(
     if isinstance(operation, CleanupClaimedOperation):
         return _execute_cleanup(
             operation,
+            provisioner_socket=provisioner_socket,
+            timeout_seconds=timeout_seconds,
+        )
+    if isinstance(operation, RestoreClaimedOperation):
+        return execute_restore_operation(
+            operation,
+            settings=settings,
             provisioner_socket=provisioner_socket,
             timeout_seconds=timeout_seconds,
         )
