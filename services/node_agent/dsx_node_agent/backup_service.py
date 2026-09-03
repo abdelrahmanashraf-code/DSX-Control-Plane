@@ -9,7 +9,7 @@ import re
 import shutil
 import tarfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -282,7 +282,10 @@ class BackupEngine:
         manifest_path = workspace / _MANIFEST_FILE
         database_path = workspace / _DATABASE_FILE
         filestore_path = workspace / _FILESTORE_FILE
-        if not all(path.is_file() and not path.is_symlink() for path in (manifest_path, database_path, filestore_path)):
+        if not all(
+            path.is_file() and not path.is_symlink()
+            for path in (manifest_path, database_path, filestore_path)
+        ):
             return None
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -380,7 +383,7 @@ class BackupEngine:
                 "provisioning_operation_id": request.provisioning_operation_id,
                 "database_name": request.database_name,
                 "backup_type": request.backup_type,
-                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "artifacts": [database_artifact, filestore_artifact],
             }
             manifest_path.write_text(
