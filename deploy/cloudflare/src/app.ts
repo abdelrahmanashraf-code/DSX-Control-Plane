@@ -11,6 +11,7 @@ import { handleProvisioningAdminRoute } from "./provisioning";
 import { handleProvisioningRetryRoute } from "./provisioningRetry";
 import { handleRestoreOperationRoute } from "./restoreOperations";
 import { handleRestoreAdminRoute } from "./restores";
+import { reconcileExpiredTrials } from "./trialExpiration";
 import { handleTrialAdminRoute } from "./trials";
 
 interface Env {
@@ -83,5 +84,9 @@ export default {
     if (provisioningResponse) return provisioningResponse;
 
     return await legacyWorker.fetch(request, env);
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    await reconcileExpiredTrials(env);
   },
 };
