@@ -173,14 +173,25 @@ export function deterministicRestoreDatabaseName(
   targetSlug: string,
   targetTenantId: string,
 ): string {
-  const prefix = databasePrefix.toLowerCase().replace(/[^a-z0-9_]/g, "_");
-  const slug = targetSlug.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const prefix = databasePrefix.toLowerCase();
+  if (!SAFE_DATABASE.test(prefix)) throw new Error("invalid_restore_database_prefix");
+
+  const normalizedSlug = targetSlug
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "tenant";
   const suffix = targetTenantId.toLowerCase().replace(/[^a-f0-9]/g, "").slice(0, 8);
-  const tail = `_restore_${slug}_${suffix}`;
-  const headBudget = 63 - tail.length;
-  const head = prefix.slice(0, Math.max(1, headBudget)).replace(/_+$/g, "") || "d";
-  const value = `${head}${tail}`.slice(0, 63);
-  if (!SAFE_DATABASE.test(value)) throw new Error("invalid_restore_database_name");
+  if (suffix.length !== 8) throw new Error("invalid_restore_tenant_suffix");
+
+  const fixedHead = `${prefix}_restore_`;
+  const slugBudget = 63 - fixedHead.length - 1 - suffix.length;
+  if (slugBudget < 1) throw new Error("invalid_restore_database_prefix");
+
+  const slug = normalizedSlug.slice(0, slugBudget).replace(/_+$/g, "") || "t";
+  const value = `${fixedHead}${slug}_${suffix}`;
+  if (!SAFE_DATABASE.test(value) || !value.startsWith(`${prefix}_restore_`)) {
+    throw new Error("invalid_restore_database_name");
+  }
   return value;
 }
 
