@@ -31,7 +31,7 @@ class ActiveOperation:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="DSX Node Agent")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subsers(dest="command", required=True)
     sub.add_parser("diagnostics", help="Print local, non-secret metrics and exit")
     sub.add_parser("enroll", help="Enroll this node using DSX_ENROLLMENT_TOKEN")
     sub.add_parser("heartbeat-once", help="Send one authenticated heartbeat and exit")
@@ -100,6 +100,9 @@ def _advance_active_operation(
             state=result.state,
             error_code=result.error_code,
             database_name=result.database_name,
+            backup_artifacts=getattr(result, "backup_artifacts", None),
+            manifest_sha256=getattr(result, "manifest_sha256", None),
+            total_size_bytes=getattr(result, "total_size_bytes", None),
         )
         return True
 
