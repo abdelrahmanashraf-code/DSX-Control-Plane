@@ -94,6 +94,18 @@ class FakeBackupProvisioning:
         )
 
 
+def prepare_backup(tmp_path: Path) -> tuple[BackupEngine, ProvisionerConfig, object]:
+    config = backup_config(tmp_path)
+    request = parse_backup_request(valid_privileged_backup_request())
+    target = config.profiles[request.template_id].filestore_root / request.database_name
+    target.mkdir(parents=True, mode=0o700)
+    (target / "ab").mkdir()
+    (target / "ab" / "blob").write_bytes(b"ODOO-FILESTORE-DATA")
+    engine = BackupEngine(config, FakeBackupProvisioning(marker_matches=True))  # type: ignore[arg-type]
+    engine.backup(request)
+    return engine, config, request
+
+
 def test_backup_claim_is_strictly_typed() -> None:
     operation = parse_any_claimed_operation(valid_backup_claim())
     assert isinstance(operation, BackupClaimedOperation)
@@ -181,6 +193,28 @@ def test_backup_creates_dump_filestore_archive_manifest_and_replays(tmp_path: Pa
     assert replay["state"] == "prepared"
     assert replay["manifest_sha256"] == result["manifest_sha256"]
     assert provisioning.dump_calls == 1
+
+
+@pytest.mark.parametrize("artifact_name", ["database.dump", "filestore.tar.gz"])
+def test_backup_replay_rejects_tampered_artifact(tmp_path: Path, artifact_name: str) -> None:
+    engine, config, request = prepare_backup(tmp_path)
+    workspace = config.work_root / "backups" / request.operation_id
+    with (workspace / artifact_name).open("ab") as handle:
+        handle.write(b"TAMPERED")
+
+    with pytest.raises(ProvisionerError, match="backup_workspace_conflict"):
+        engine.backup(request)
+
+
+def test_backup_replay_rejects_manifest_schema_change(tmp_path: Path) -> None:
+    engine, config, request = prepare_backup(tmp_path)
+    manifest_path = config.work_root / "backups" / request.operation_id / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["unexpected"] = "blocked"
+    manifest_path.write_text(json.dumps(manifest) + "\n")
+
+    with pytest.raises(ProvisionerError, match="backup_workspace_conflict"):
+        engine.backup(request)
 
 
 def test_backup_rejects_symlink_inside_filestore(tmp_path: Path) -> None:
