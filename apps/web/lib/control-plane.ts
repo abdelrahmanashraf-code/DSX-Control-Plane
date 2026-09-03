@@ -33,6 +33,12 @@ export type NodesData = {
   nodes: JsonRecord[];
 };
 
+export type TenantsData = {
+  configured: boolean;
+  error: string | null;
+  tenants: JsonRecord[];
+};
+
 export type CreateTrialInput = {
   name: string;
   slug: string;
@@ -202,6 +208,20 @@ export async function getNodesData(): Promise<NodesData> {
       configured: true,
       error: error instanceof Error ? error.message : "control_plane_unavailable",
       nodes: [],
+    };
+  }
+}
+
+export async function getTenantsData(): Promise<TenantsData> {
+  if (!config()) return { configured: false, error: null, tenants: [] };
+  try {
+    const payload = await request("/v1/admin/tenants");
+    return { configured: true, error: null, tenants: records(payload, "tenants") };
+  } catch (error) {
+    return {
+      configured: true,
+      error: error instanceof Error ? error.message : "control_plane_unavailable",
+      tenants: [],
     };
   }
 }
