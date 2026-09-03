@@ -7,6 +7,9 @@
     "NODE_STALE_SECONDS": "90",
     "NODE_OFFLINE_SECONDS": "300"
   },
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
   "d1_databases": [
     {
       "binding": "DB",
