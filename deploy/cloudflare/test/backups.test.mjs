@@ -68,7 +68,15 @@ test("backup migration models complete backup sets and bounded lifecycle", () =>
     "utf8",
   );
 
-  for (const state of ["queued", "dispatched", "running", "uploaded", "verified", "failed"]) {
+  for (const state of [
+    "queued",
+    "dispatched",
+    "running",
+    "prepared",
+    "uploaded",
+    "verified",
+    "failed",
+  ]) {
     assert.match(migration, new RegExp(`'${state}'`));
   }
   for (const kind of ["database_dump", "filestore_archive", "manifest"]) {
@@ -76,4 +84,5 @@ test("backup migration models complete backup sets and bounded lifecycle", () =>
   }
   assert.match(migration, /UNIQUE \(tenant_id, idempotency_key\)/);
   assert.match(migration, /manifest_sha256/);
+  assert.match(migration, /prepared_at/);
 });
