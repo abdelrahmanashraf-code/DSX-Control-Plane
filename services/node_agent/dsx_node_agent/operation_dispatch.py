@@ -40,6 +40,7 @@ _RESTORE_OPERATION = "restore_verified_backup"
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SAFE_DATABASE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 _SAFE_CODE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,119}$")
+_ALLOWED_CLEANUP_ENVIRONMENTS = {"test", "trial"}
 _MAX_LOCAL_RESPONSE_BYTES = 8 * 1024
 
 
@@ -146,8 +147,10 @@ def _parse_cleanup_claim(response_payload: Any) -> CleanupClaimedOperation | Non
     environment_kind = _string(
         payload["environment_kind"], max_length=32, field="environment_kind"
     ).lower()
-    if environment_kind != "test":
-        raise OperationProtocolError("cleanup_non_test_environment_blocked")
+    if environment_kind == "production":
+        raise OperationProtocolError("cleanup_production_environment_blocked")
+    if environment_kind not in _ALLOWED_CLEANUP_ENVIRONMENTS:
+        raise OperationProtocolError("invalid_cleanup_environment_kind")
     database_name = _string(payload["database_name"], max_length=63, field="database_name").lower()
     if not _SAFE_DATABASE.fullmatch(database_name):
         raise OperationProtocolError("invalid_database_name")
