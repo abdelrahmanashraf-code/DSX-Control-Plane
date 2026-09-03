@@ -9,6 +9,7 @@ import legacyWorker from "./index";
 import { handleNodeOperationRoute } from "./nodeOperations";
 import { handleProvisioningAdminRoute } from "./provisioning";
 import { handleProvisioningRetryRoute } from "./provisioningRetry";
+import { handleRestoreOperationRoute } from "./restoreOperations";
 import { handleRestoreAdminRoute } from "./restores";
 
 interface Env {
@@ -33,6 +34,9 @@ export default {
     if (request.method === "GET" && historyMatch) {
       return await listNodeHealthHistory(request, env, historyMatch[1]);
     }
+
+    const restoreOperationResponse = await handleRestoreOperationRoute(request, env);
+    if (restoreOperationResponse) return restoreOperationResponse;
 
     const backupUploadOperationResponse = await handleBackupUploadOperationRoute(request, env);
     if (backupUploadOperationResponse) return backupUploadOperationResponse;
