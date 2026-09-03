@@ -35,8 +35,20 @@ export default {
       return await listNodeHealthHistory(request, env, historyMatch[1]);
     }
 
-    const restoreOperationResponse = await handleRestoreOperationRoute(request, env);
-    if (restoreOperationResponse) return restoreOperationResponse;
+    const operationResultMatch = url.pathname.match(
+      /^\/v1\/nodes\/([0-9a-f-]+)\/operations\/([0-9a-f-]+)\/result$/i,
+    );
+    let restoreOwnsResult = false;
+    if (request.method === "POST" && operationResultMatch) {
+      const restoreJob = await env.DB.prepare(`SELECT id FROM restore_jobs WHERE id = ?`)
+        .bind(operationResultMatch[2]).first<{ id: string }>();
+      restoreOwnsResult = Boolean(restoreJob);
+    }
+
+    if (!operationResultMatch || restoreOwnsResult) {
+      const restoreOperationResponse = await handleRestoreOperationRoute(request, env);
+      if (restoreOperationResponse) return restoreOperationResponse;
+    }
 
     const backupUploadOperationResponse = await handleBackupUploadOperationRoute(request, env);
     if (backupUploadOperationResponse) return backupUploadOperationResponse;
