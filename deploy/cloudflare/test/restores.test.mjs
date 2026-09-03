@@ -87,8 +87,21 @@ test("restore database name is deterministic, safe, distinct and bounded", () =>
   ));
   assert.match(value, /^[a-z][a-z0-9_]{2,62}$/);
   assert.ok(value.length <= 63);
-  assert.match(value, /_restore_/);
+  assert.ok(value.startsWith("dsx_restaurant_restore_"));
   assert.match(value, /60ce37cb$/);
+});
+
+test("long restore slug truncates slug only and preserves local database prefix", () => {
+  const value = deterministicRestoreDatabaseName(
+    "dsx_restaurant",
+    "phase4-restore-ownership-gate-20260903",
+    "2a2645e9-9ad5-4a62-a565-9ad048bed4a7",
+  );
+
+  assert.ok(value.startsWith("dsx_restaurant_restore_"));
+  assert.ok(value.endsWith("_2a2645e9"));
+  assert.ok(value.length <= 63);
+  assert.equal(value, "dsx_restaurant_restore_phase4_restore_ownership_ga_2a2645e9");
 });
 
 test("restore requires exact verified remote artifact set", () => {
