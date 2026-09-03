@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 const NAV_ITEMS = [
   { arabic: "الرئيسية", english: "Dashboard", href: "/", key: "dashboard", enabled: true },
   { arabic: "التجارب", english: "Trials", href: "/trials", key: "trials", enabled: true },
-  { arabic: "العملاء", english: "Tenants", href: "/tenants", key: "tenants", enabled: false },
+  { arabic: "العملاء", english: "Tenants", href: "/tenants", key: "tenants", enabled: true },
   { arabic: "السيرفرات", english: "Nodes", href: "/nodes", key: "nodes", enabled: true },
   { arabic: "العمليات", english: "Provisioning", href: "/provisioning", key: "provisioning", enabled: false },
   { arabic: "النسخ", english: "Backups & Restore", href: "/backups", key: "backups", enabled: false },
