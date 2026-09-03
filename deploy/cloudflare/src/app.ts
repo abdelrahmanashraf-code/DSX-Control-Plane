@@ -11,6 +11,7 @@ import { handleProvisioningAdminRoute } from "./provisioning";
 import { handleProvisioningRetryRoute } from "./provisioningRetry";
 import { handleRestoreOperationRoute } from "./restoreOperations";
 import { handleRestoreAdminRoute } from "./restores";
+import { handleTrialCleanupAdminRoute } from "./trialCleanupAdmin";
 import { handleTrialCleanupOperationRoute } from "./trialCleanupOperations";
 import { reconcileExpiredTrials } from "./trialExpiration";
 import { handleTrialAdminRoute } from "./trials";
@@ -74,6 +75,9 @@ export default {
 
     const backupAdminResponse = await handleBackupAdminRoute(request, env);
     if (backupAdminResponse) return backupAdminResponse;
+
+    const trialCleanupAdminResponse = await handleTrialCleanupAdminRoute(request, env);
+    if (trialCleanupAdminResponse) return trialCleanupAdminResponse;
 
     const cleanupAdminResponse = await handleCleanupAdminRoute(request, env);
     if (cleanupAdminResponse) return cleanupAdminResponse;
