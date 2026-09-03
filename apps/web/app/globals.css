@@ -223,8 +223,22 @@ tbody tr:last-child td { border-bottom: 0; }
 }
 .primary-button:hover:not(:disabled) { filter: brightness(1.06); }
 .primary-button:disabled { opacity: 0.45; cursor: not-allowed; }
-.trials-table { min-width: 980px; }
+.trials-table { min-width: 1180px; }
 .trials-table td code { font-size: 10px; color: #8fb0c0; }
+.cleanup-cell { min-width: 130px; }
+.cleanup-cell small { margin-top: 6px; color: #d48888; max-width: 180px; overflow-wrap: anywhere; }
+.retry-button {
+  border: 1px solid #7a6330;
+  border-radius: 9px;
+  background: #2c2616;
+  color: #e7c875;
+  padding: 7px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.retry-button:hover { background: #3b321b; border-color: #9d7f3b; }
 
 @media (max-width: 1180px) {
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
