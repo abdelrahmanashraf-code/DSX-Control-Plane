@@ -1,6 +1,6 @@
 import "server-only";
 
-type JsonRecord = Record<string, unknown>;
+export type JsonRecord = Record<string, unknown>;
 
 export type DashboardData = {
   configured: boolean;
@@ -25,6 +25,12 @@ export type TrialsData = {
   configured: boolean;
   error: string | null;
   trials: JsonRecord[];
+};
+
+export type NodesData = {
+  configured: boolean;
+  error: string | null;
+  nodes: JsonRecord[];
 };
 
 export type CreateTrialInput = {
@@ -168,6 +174,38 @@ export async function getTrialsData(): Promise<TrialsData> {
   }
 }
 
+export async function getNodesData(): Promise<NodesData> {
+  if (!config()) return { configured: false, error: null, nodes: [] };
+  try {
+    const [nodesPayload, tenantsPayload] = await Promise.all([
+      request("/v1/admin/nodes"),
+      request("/v1/admin/tenants"),
+    ]);
+    const nodes = records(nodesPayload, "nodes");
+    const tenants = records(tenantsPayload, "tenants");
+    const tenantCounts = new Map<string, number>();
+    for (const tenant of tenants) {
+      const nodeId = text(tenant, "assigned_node_id");
+      if (!nodeId || text(tenant, "status") === "decommissioned") continue;
+      tenantCounts.set(nodeId, (tenantCounts.get(nodeId) || 0) + 1);
+    }
+    return {
+      configured: true,
+      error: null,
+      nodes: nodes.map((node) => ({
+        ...node,
+        tenant_count: tenantCounts.get(text(node, "id")) || 0,
+      })),
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      error: error instanceof Error ? error.message : "control_plane_unavailable",
+      nodes: [],
+    };
+  }
+}
+
 export async function createTrial(input: CreateTrialInput): Promise<void> {
   if (!config()) throw new Error("control_plane_not_configured");
   await request("/v1/admin/trials", {
@@ -194,4 +232,16 @@ export function field(record: JsonRecord, key: string, fallback = "—"): string
   if (typeof value === "string" && value.trim()) return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return fallback;
+}
+
+export function numberField(record: JsonRecord, key: string): number | null {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function nestedNumberField(record: JsonRecord, key: string, nestedKey: string): number | null {
+  const value = record[key];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const nested = (value as JsonRecord)[nestedKey];
+  return typeof nested === "number" && Number.isFinite(nested) ? nested : null;
 }
