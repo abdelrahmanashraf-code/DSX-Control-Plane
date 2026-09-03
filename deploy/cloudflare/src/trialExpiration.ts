@@ -34,19 +34,20 @@ export function isTrialDue(
   return Number.isFinite(expiresAt) && expiresAt <= nowMs;
 }
 
-async function markTrialExpired(env: Env, trialId: string, now: string): Promise<void> {
-  await env.DB.batch([
-    env.DB.prepare(
-      `UPDATE tenants
-          SET status = 'suspended', trial_state = 'expired', trial_expired_at = ?, updated_at = ?
-        WHERE id = ? AND environment_kind = 'trial' AND status = 'ready' AND trial_state = 'active'`,
-    ).bind(now, now, trialId),
-    env.DB.prepare(
-      `INSERT INTO audit_events
-         (id, event_type, actor_type, actor_id, target_type, target_id, payload, created_at)
-       VALUES (?, 'trial.expired', 'system', 'trial-expiration', 'tenant', ?, '{}', ?)`,
-    ).bind(crypto.randomUUID(), trialId, now),
-  ]);
+async function markTrialExpired(env: Env, trialId: string, now: string): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `UPDATE tenants
+        SET status = 'suspended', trial_state = 'expired', trial_expired_at = ?, updated_at = ?
+      WHERE id = ? AND environment_kind = 'trial' AND status = 'ready' AND trial_state = 'active'`,
+  ).bind(now, now, trialId).run();
+  if (!result.meta.changes) return false;
+
+  await env.DB.prepare(
+    `INSERT INTO audit_events
+       (id, event_type, actor_type, actor_id, target_type, target_id, payload, created_at)
+     VALUES (?, 'trial.expired', 'system', 'trial-expiration', 'tenant', ?, '{}', ?)`,
+  ).bind(crypto.randomUUID(), trialId, now).run();
+  return true;
 }
 
 async function queueExpiredTrialCleanup(env: Env, trialId: string, now: string): Promise<boolean> {
@@ -61,11 +62,11 @@ async function queueExpiredTrialCleanup(env: Env, trialId: string, now: string):
   const existing = await env.DB.prepare(`SELECT id FROM cleanup_jobs WHERE tenant_id = ?`)
     .bind(trialId).first<{ id: string }>();
   if (existing) {
-    await env.DB.prepare(
+    const updated = await env.DB.prepare(
       `UPDATE tenants SET trial_state = 'cleanup_pending', updated_at = ?
         WHERE id = ? AND trial_state = 'expired'`,
     ).bind(now, trialId).run();
-    return true;
+    return Boolean(updated.meta.changes);
   }
 
   const provisioned = await env.DB.prepare(
@@ -154,8 +155,7 @@ export async function reconcileExpiredTrials(env: Env, nowMs = Date.now()): Prom
   let expired = 0;
   for (const trial of due.results) {
     if (!isTrialDue(trial, nowMs)) continue;
-    await markTrialExpired(env, trial.id, now);
-    expired += 1;
+    if (await markTrialExpired(env, trial.id, now)) expired += 1;
   }
 
   const awaitingCleanup = await env.DB.prepare(
