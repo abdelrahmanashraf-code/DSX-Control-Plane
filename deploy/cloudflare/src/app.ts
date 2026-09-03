@@ -1,4 +1,5 @@
 import { listOperationalAlerts } from "./alerts";
+import { handleBackupAdminRoute } from "./backups";
 import { handleCleanupAdminRoute } from "./cleanup";
 import { handleCleanupOperationRoute } from "./cleanupOperations";
 import { listNodeHealthHistory } from "./healthHistory";
@@ -35,6 +36,9 @@ export default {
 
     const nodeOperationResponse = await handleNodeOperationRoute(request, env);
     if (nodeOperationResponse) return nodeOperationResponse;
+
+    const backupAdminResponse = await handleBackupAdminRoute(request, env);
+    if (backupAdminResponse) return backupAdminResponse;
 
     const cleanupAdminResponse = await handleCleanupAdminRoute(request, env);
     if (cleanupAdminResponse) return cleanupAdminResponse;
