@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dsx_node_agent.backup_service import BackupEngine, parse_backup_request
 from dsx_node_agent.provisioner import (
     ProvisionerConfig,
     ProvisionerError,
@@ -24,6 +25,7 @@ _MAX_REQUEST_BYTES = 16 * 1024
 _MAX_RESPONSE_BYTES = 8 * 1024
 _ALLOWED_PROVISION = "provision_odoo_environment"
 _ALLOWED_CLEANUP = "cleanup_test_odoo_environment"
+_ALLOWED_BACKUP = "backup_odoo_environment"
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SAFE_DATABASE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 _DROPDB = "/usr/bin/dropdb"
@@ -253,6 +255,9 @@ class _TypedRequestHandler(socketserver.StreamRequestHandler):
             elif operation_type == _ALLOWED_CLEANUP:
                 request = parse_cleanup_request(payload)
                 result = self.server.cleanup.cleanup(request)  # type: ignore[attr-defined]
+            elif operation_type == _ALLOWED_BACKUP:
+                request = parse_backup_request(payload)
+                result = self.server.backup.backup(request)  # type: ignore[attr-defined]
             else:
                 raise ProvisionerError("unsupported_operation_type")
             self._write(result)
@@ -263,7 +268,7 @@ class _TypedRequestHandler(socketserver.StreamRequestHandler):
         except Exception:  # noqa: BLE001 - privilege boundary must never leak an exception.
             self._write({"state": "failed", "error_code": "internal_provisioner_error"})
 
-    def _write(self, value: dict[str, str]) -> None:
+    def _write(self, value: dict[str, Any]) -> None:
         encoded = json.dumps(value, separators=(",", ":")).encode("utf-8") + b"\n"
         self.wfile.write(encoded[:_MAX_RESPONSE_BYTES])
 
@@ -274,9 +279,11 @@ class _TypedUnixServer(socketserver.UnixStreamServer):
         socket_path: str,
         provisioning: ProvisioningEngine,
         cleanup: CleanupEngine,
+        backup: BackupEngine,
     ) -> None:
         self.provisioning = provisioning
         self.cleanup = cleanup
+        self.backup = backup
         super().__init__(socket_path, _TypedRequestHandler)
 
 
@@ -290,7 +297,8 @@ def serve(config_path: Path, socket_path: Path) -> None:
 
     provisioning = ProvisioningEngine(config)
     cleanup = CleanupEngine(config, provisioning)
-    server = _TypedUnixServer(str(socket_path), provisioning, cleanup)
+    backup = BackupEngine(config, provisioning)
+    server = _TypedUnixServer(str(socket_path), provisioning, cleanup, backup)
     os.chmod(socket_path, 0o660)
     try:
         server.serve_forever(poll_interval=0.5)
@@ -303,7 +311,7 @@ def serve(config_path: Path, socket_path: Path) -> None:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="DSX typed local provisioning and cleanup helper")
+    parser = argparse.ArgumentParser(description="DSX typed local provisioning, cleanup and backup helper")
     sub = parser.add_subparsers(dest="command", required=True)
     serve_parser = sub.add_parser("serve")
     serve_parser.add_argument("--config", type=Path, default=Path("/etc/dsx-provisioner.json"))
