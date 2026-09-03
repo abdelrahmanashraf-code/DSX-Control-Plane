@@ -9,6 +9,7 @@ import legacyWorker from "./index";
 import { handleNodeOperationRoute } from "./nodeOperations";
 import { handleProvisioningAdminRoute } from "./provisioning";
 import { handleProvisioningRetryRoute } from "./provisioningRetry";
+import { handleRestoreAdminRoute } from "./restores";
 
 interface Env {
   DB: D1Database;
@@ -44,6 +45,9 @@ export default {
 
     const nodeOperationResponse = await handleNodeOperationRoute(request, env);
     if (nodeOperationResponse) return nodeOperationResponse;
+
+    const restoreAdminResponse = await handleRestoreAdminRoute(request, env);
+    if (restoreAdminResponse) return restoreAdminResponse;
 
     const backupAdminResponse = await handleBackupAdminRoute(request, env);
     if (backupAdminResponse) return backupAdminResponse;
