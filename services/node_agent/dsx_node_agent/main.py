@@ -31,7 +31,7 @@ class ActiveOperation:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="DSX Node Agent")
-    sub = parser.add_subsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("diagnostics", help="Print local, non-secret metrics and exit")
     sub.add_parser("enroll", help="Enroll this node using DSX_ENROLLMENT_TOKEN")
     sub.add_parser("heartbeat-once", help="Send one authenticated heartbeat and exit")
