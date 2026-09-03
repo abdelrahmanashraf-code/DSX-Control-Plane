@@ -25,6 +25,8 @@ _SAFE_DATABASE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 _SAFE_MODULE = re.compile(r"^[A-Za-z0-9_]{1,120}$")
 _ALLOWED_SECTORS = {"restaurant", "cafe", "retail", "supermarket"}
 _ALLOWED_OPERATION = "provision_odoo_environment"
+_ALLOWED_NON_PRODUCTION_ENVIRONMENTS = {"test", "trial"}
+_ALLOWED_PHASES = {"test-only", "trial-enabled"}
 
 _PG_DUMP = "/usr/bin/pg_dump"
 _PG_RESTORE = "/usr/bin/pg_restore"
@@ -147,8 +149,10 @@ def parse_request(value: Any) -> ProvisionRequest:
     environment_kind = _string(
         payload["environment_kind"], field="environment_kind", max_length=32
     ).lower()
-    if environment_kind != "test":
-        raise ProvisionerError("non_test_environment_blocked")
+    if environment_kind == "production":
+        raise ProvisionerError("production_environment_blocked")
+    if environment_kind not in _ALLOWED_NON_PRODUCTION_ENVIRONMENTS:
+        raise ProvisionerError("invalid_environment_kind")
 
     template_id = _string(payload["template_id"], field="template_id", max_length=96)
     if not _SAFE_ID.fullmatch(template_id):
@@ -223,7 +227,7 @@ def parse_config(value: Any) -> ProvisionerConfig:
     if not isinstance(value["enabled"], bool):
         raise ProvisionerError("invalid_enabled")
     phase = _string(value["phase"], field="phase", max_length=32)
-    if phase != "test-only":
+    if phase not in _ALLOWED_PHASES:
         raise ProvisionerError("invalid_phase")
     postgres_os_user = _safe_account(value["postgres_os_user"], field="postgres_os_user")
     work_root = _safe_absolute_path(value["work_root"], field="work_root")
@@ -562,6 +566,10 @@ class ProvisioningEngine:
     def provision(self, request: ProvisionRequest) -> dict[str, str]:
         if not self.config.enabled:
             raise ProvisionerError("provisioner_disabled")
+        if request.environment_kind == "trial" and self.config.phase != "trial-enabled":
+            raise ProvisionerError("trial_environment_blocked")
+        if request.environment_kind not in _ALLOWED_NON_PRODUCTION_ENVIRONMENTS:
+            raise ProvisionerError("environment_not_allowed")
         profile = self.config.profiles.get(request.template_id)
         if profile is None:
             raise ProvisionerError("local_template_profile_missing")
