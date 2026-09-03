@@ -549,6 +549,7 @@ class ProvisioningEngine:
                         "--no-owner",
                         "--no-privileges",
                         "--exit-on-error",
+                        f"--role={profile.database_owner}",
                         f"--dbname={request.database_name}",
                     ],
                     timeout=1200,
