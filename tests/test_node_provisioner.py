@@ -46,22 +46,31 @@ def make_profile(tmp_path: Path) -> ProvisionerProfile:
     )
 
 
-def make_config(tmp_path: Path, *, enabled: bool = True) -> ProvisionerConfig:
+def make_config(
+    tmp_path: Path,
+    *,
+    enabled: bool = True,
+    phase: str = "test-only",
+) -> ProvisionerConfig:
     profile = make_profile(tmp_path)
     return ProvisionerConfig(
         enabled=enabled,
-        phase="test-only",
+        phase=phase,
         postgres_os_user="postgres",
         work_root=tmp_path / "work",
         profiles={profile.template_id: profile},
     )
 
 
-def test_local_provisioner_blocks_non_test_environments() -> None:
-    for environment_kind in ("trial", "production"):
-        payload = valid_request_payload(environment_kind=environment_kind)
-        with pytest.raises(ProvisionerError, match="non_test_environment_blocked"):
-            parse_request(payload)
+def test_local_provisioner_accepts_trial_payload_but_blocks_production() -> None:
+    trial = parse_request(valid_request_payload(environment_kind="trial"))
+    assert trial.environment_kind == "trial"
+
+    with pytest.raises(ProvisionerError, match="production_environment_blocked"):
+        parse_request(valid_request_payload(environment_kind="production"))
+
+    with pytest.raises(ProvisionerError, match="invalid_environment_kind"):
+        parse_request(valid_request_payload(environment_kind="staging"))
 
 
 def test_local_provisioner_rejects_free_form_fields() -> None:
@@ -76,7 +85,7 @@ def test_local_provisioner_rejects_free_form_fields() -> None:
         parse_request(payload)
 
 
-def test_config_is_test_only_and_paths_are_absolute() -> None:
+def test_config_requires_explicit_trial_enablement_and_absolute_paths() -> None:
     raw = {
         "enabled": False,
         "phase": "test-only",
@@ -88,6 +97,14 @@ def test_config_is_test_only_and_paths_are_absolute() -> None:
     assert config.enabled is False
     assert config.phase == "test-only"
 
+    raw["phase"] = "trial-enabled"
+    assert parse_config(raw).phase == "trial-enabled"
+
+    raw["phase"] = "production-enabled"
+    with pytest.raises(ProvisionerError, match="invalid_phase"):
+        parse_config(raw)
+
+    raw["phase"] = "test-only"
     raw["work_root"] = "relative/path"
     with pytest.raises(ProvisionerError, match="invalid_work_root"):
         parse_config(raw)
@@ -103,6 +120,36 @@ def test_disabled_provisioner_fails_before_postgres_access(tmp_path: Path, monke
     monkeypatch.setattr(engine, "_database_exists", unexpected_database_access)
     with pytest.raises(ProvisionerError, match="provisioner_disabled"):
         engine.provision(request)
+
+
+def test_test_only_phase_blocks_trial_before_postgres_access(tmp_path: Path, monkeypatch) -> None:
+    request = parse_request(valid_request_payload(environment_kind="trial"))
+    engine = ProvisioningEngine(make_config(tmp_path, phase="test-only"))
+
+    def unexpected_database_access(_database_name: str) -> bool:
+        raise AssertionError("blocked trial must not touch PostgreSQL")
+
+    monkeypatch.setattr(engine, "_database_exists", unexpected_database_access)
+    with pytest.raises(ProvisionerError, match="trial_environment_blocked"):
+        engine.provision(request)
+
+
+def test_trial_enabled_phase_allows_managed_trial(tmp_path: Path, monkeypatch) -> None:
+    request = parse_request(valid_request_payload(environment_kind="trial"))
+    engine = ProvisioningEngine(make_config(tmp_path, phase="trial-enabled"))
+
+    monkeypatch.setattr(engine, "_database_exists", lambda _name: True)
+    monkeypatch.setattr(engine, "_source_is_odoo", lambda _name: True)
+    monkeypatch.setattr(
+        engine,
+        "_read_marker",
+        lambda _name: (request.tenant_id, request.template_id),
+    )
+    monkeypatch.setattr(engine, "_prepare_filestore", lambda _request, _profile: False)
+    monkeypatch.setattr(engine, "_validate_modules", lambda _request: None)
+
+    result = engine.provision(request)
+    assert result == {"state": "ready", "database_name": request.database_name}
 
 
 def test_existing_managed_database_is_idempotent(tmp_path: Path, monkeypatch) -> None:
