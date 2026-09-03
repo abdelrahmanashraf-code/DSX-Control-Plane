@@ -11,6 +11,7 @@ import { handleProvisioningAdminRoute } from "./provisioning";
 import { handleProvisioningRetryRoute } from "./provisioningRetry";
 import { handleRestoreOperationRoute } from "./restoreOperations";
 import { handleRestoreAdminRoute } from "./restores";
+import { handleTrialAdminRoute } from "./trials";
 
 interface Env {
   DB: D1Database;
@@ -18,6 +19,7 @@ interface Env {
   NODE_STALE_SECONDS?: string;
   NODE_OFFLINE_SECONDS?: string;
   NODE_OPERATION_LEASE_SECONDS?: string;
+  TRIAL_BASE_DOMAIN?: string;
 }
 
 export default {
@@ -73,6 +75,9 @@ export default {
 
     const retryResponse = await handleProvisioningRetryRoute(request, env);
     if (retryResponse) return retryResponse;
+
+    const trialResponse = await handleTrialAdminRoute(request, env);
+    if (trialResponse) return trialResponse;
 
     const provisioningResponse = await handleProvisioningAdminRoute(request, env);
     if (provisioningResponse) return provisioningResponse;
