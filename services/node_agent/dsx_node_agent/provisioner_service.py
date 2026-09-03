@@ -34,6 +34,7 @@ _ALLOWED_BACKUP = "backup_odoo_environment"
 _ALLOWED_BACKUP_STAGE = "stage_backup_for_upload"
 _ALLOWED_BACKUP_PURGE = "purge_verified_backup"
 _ALLOWED_RESTORE = "restore_verified_backup"
+_ALLOWED_CLEANUP_ENVIRONMENTS = {"test", "trial"}
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SAFE_DATABASE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 _DROPDB = "/usr/bin/dropdb"
@@ -96,8 +97,10 @@ def parse_cleanup_request(value: Any) -> CleanupRequest:
     environment_kind = _string(
         payload["environment_kind"], field="environment_kind", max_length=32
     ).lower()
-    if environment_kind != "test":
-        raise ProvisionerError("cleanup_non_test_environment_blocked")
+    if environment_kind == "production":
+        raise ProvisionerError("cleanup_production_environment_blocked")
+    if environment_kind not in _ALLOWED_CLEANUP_ENVIRONMENTS:
+        raise ProvisionerError("invalid_cleanup_environment_kind")
 
     database_name = _string(payload["database_name"], field="database_name", max_length=63).lower()
     if not _SAFE_DATABASE.fullmatch(database_name):
@@ -188,8 +191,10 @@ class CleanupEngine:
     def cleanup(self, request: CleanupRequest) -> dict[str, str]:
         if not self.config.enabled:
             raise ProvisionerError("provisioner_disabled")
-        if self.config.phase != "test-only" or request.environment_kind != "test":
-            raise ProvisionerError("cleanup_non_test_environment_blocked")
+        if request.environment_kind == "trial" and self.config.phase != "trial-enabled":
+            raise ProvisionerError("cleanup_trial_environment_blocked")
+        if request.environment_kind not in _ALLOWED_CLEANUP_ENVIRONMENTS:
+            raise ProvisionerError("cleanup_environment_not_allowed")
 
         profile = self.config.profiles.get(request.template_id)
         if profile is None:
