@@ -121,13 +121,16 @@ def _advance_active_operation(
                     file=sys.stderr,
                     flush=True,
                 )
-        if isinstance(active.operation, RestoreClaimedOperation) and result.state == "validated":
-            if not purge_restore_download_local(active.operation):
-                print(
-                    f"validated restore download purge deferred id={active.operation.operation_id}",
-                    file=sys.stderr,
-                    flush=True,
-                )
+        if (
+            isinstance(active.operation, RestoreClaimedOperation)
+            and result.state == "validated"
+            and not purge_restore_download_local(active.operation)
+        ):
+            print(
+                f"validated restore download purge deferred id={active.operation.operation_id}",
+                file=sys.stderr,
+                flush=True,
+            )
         return True
 
     if now >= active.next_lease_renewal:
