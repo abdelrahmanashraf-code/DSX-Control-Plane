@@ -16,7 +16,7 @@ from dsx_node_agent.provisioner import (
 from dsx_node_agent.provisioner_service import CleanupEngine, parse_cleanup_request
 
 
-def valid_cleanup_claim() -> dict:
+def valid_cleanup_claim(environment_kind: str = "test") -> dict:
     return {
         "operation": {
             "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
@@ -25,7 +25,7 @@ def valid_cleanup_claim() -> dict:
             "lease_expires_at": "2026-09-02T20:00:00.000Z",
             "payload": {
                 "tenant_id": "12345678-abcd-4abc-8abc-1234567890ab",
-                "environment_kind": "test",
+                "environment_kind": environment_kind,
                 "template_id": "template-restaurant-v1",
                 "provisioning_operation_id": "94510378-b752-4dab-a4c7-625af6a9b252",
                 "database_name": "dsx_restaurant_demo_12345678",
@@ -34,8 +34,8 @@ def valid_cleanup_claim() -> dict:
     }
 
 
-def valid_privileged_cleanup_request() -> dict:
-    operation = valid_cleanup_claim()["operation"]
+def valid_privileged_cleanup_request(environment_kind: str = "test") -> dict:
+    operation = valid_cleanup_claim(environment_kind)["operation"]
     return {
         "operation_id": operation["id"],
         "type": operation["type"],
@@ -43,10 +43,10 @@ def valid_privileged_cleanup_request() -> dict:
     }
 
 
-def cleanup_config(tmp_path: Path) -> ProvisionerConfig:
+def cleanup_config(tmp_path: Path, phase: str = "test-only") -> ProvisionerConfig:
     return ProvisionerConfig(
         enabled=True,
-        phase="test-only",
+        phase=phase,
         postgres_os_user="postgres",
         work_root=tmp_path / "work",
         profiles={
@@ -95,10 +95,13 @@ def test_cleanup_claim_is_strictly_typed() -> None:
     assert operation.payload.provisioning_operation_id == "94510378-b752-4dab-a4c7-625af6a9b252"
 
 
-def test_cleanup_claim_rejects_production_and_extra_path() -> None:
-    claim = valid_cleanup_claim()
-    claim["operation"]["payload"]["environment_kind"] = "production"
-    with pytest.raises(OperationProtocolError, match="cleanup_non_test_environment_blocked"):
+def test_cleanup_claim_accepts_trial_but_rejects_production_and_extra_path() -> None:
+    trial = parse_any_claimed_operation(valid_cleanup_claim("trial"))
+    assert isinstance(trial, CleanupClaimedOperation)
+    assert trial.payload.environment_kind == "trial"
+
+    claim = valid_cleanup_claim("production")
+    with pytest.raises(OperationProtocolError, match="cleanup_production_environment_blocked"):
         parse_any_claimed_operation(claim)
 
     claim = valid_cleanup_claim()
@@ -115,20 +118,21 @@ def test_cleanup_executor_fails_closed_without_privileged_socket() -> None:
     assert result.error_code == "cleanup_executor_not_ready"
 
 
-def test_privileged_cleanup_parser_requires_test_only_identity_fields() -> None:
-    request = valid_privileged_cleanup_request()
-    parsed = parse_cleanup_request(request)
+def test_privileged_cleanup_parser_accepts_test_and_trial_only() -> None:
+    parsed = parse_cleanup_request(valid_privileged_cleanup_request())
     assert parsed.database_name == "dsx_restaurant_demo_12345678"
     assert parsed.environment_kind == "test"
+
+    trial = parse_cleanup_request(valid_privileged_cleanup_request("trial"))
+    assert trial.environment_kind == "trial"
 
     unsafe = valid_privileged_cleanup_request()
     unsafe["payload"]["path"] = "/etc/shadow"
     with pytest.raises(ProvisionerError, match="invalid_payload_fields"):
         parse_cleanup_request(unsafe)
 
-    production = valid_privileged_cleanup_request()
-    production["payload"]["environment_kind"] = "production"
-    with pytest.raises(ProvisionerError, match="cleanup_non_test_environment_blocked"):
+    production = valid_privileged_cleanup_request("production")
+    with pytest.raises(ProvisionerError, match="cleanup_production_environment_blocked"):
         parse_cleanup_request(production)
 
 
@@ -136,6 +140,26 @@ def test_privileged_cleanup_boundary_never_accepts_lease_fields() -> None:
     claim_operation = valid_cleanup_claim()["operation"]
     with pytest.raises(ProvisionerError, match="invalid_request_fields"):
         parse_cleanup_request(claim_operation)
+
+
+def test_trial_cleanup_requires_explicit_trial_enabled_phase(tmp_path: Path) -> None:
+    request = parse_cleanup_request(valid_privileged_cleanup_request("trial"))
+    provisioning = MarkerMismatchProvisioning()
+    engine = CleanupEngine(cleanup_config(tmp_path, phase="test-only"), provisioning)
+
+    with pytest.raises(ProvisionerError, match="cleanup_trial_environment_blocked"):
+        engine.cleanup(request)
+    assert provisioning.drop_calls == 0
+
+
+def test_trial_enabled_phase_reaches_same_identity_guards(tmp_path: Path) -> None:
+    request = parse_cleanup_request(valid_privileged_cleanup_request("trial"))
+    provisioning = MarkerMismatchProvisioning()
+    engine = CleanupEngine(cleanup_config(tmp_path, phase="trial-enabled"), provisioning)
+
+    with pytest.raises(ProvisionerError, match="cleanup_marker_mismatch"):
+        engine.cleanup(request)
+    assert provisioning.drop_calls == 0
 
 
 def test_cleanup_marker_mismatch_blocks_drop_before_filestore_mutation(tmp_path: Path) -> None:
