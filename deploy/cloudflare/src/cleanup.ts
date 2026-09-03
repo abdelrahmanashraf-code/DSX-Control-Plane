@@ -78,6 +78,22 @@ export function cleanupEligibility(input: TenantRow): string | null {
   return null;
 }
 
+export function cleanupRetryEligibility(
+  job: Pick<CleanupJobRow, "state" | "node_id" | "database_name">,
+  tenant: TenantRow,
+): string | null {
+  if (tenant.environment_kind !== "test") return "cleanup_retry_non_test_environment_blocked";
+  if (job.state !== "failed") return "cleanup_retry_requires_failed_job";
+  if (tenant.status !== "failed") return "cleanup_retry_tenant_not_failed";
+  if (!tenant.assigned_node_id || tenant.assigned_node_id !== job.node_id) {
+    return "cleanup_retry_node_mismatch";
+  }
+  if (!tenant.database_name || tenant.database_name !== job.database_name) {
+    return "cleanup_retry_database_mismatch";
+  }
+  return null;
+}
+
 async function requestCleanup(request: Request, env: Env, tenantId: string): Promise<Response> {
   if (!(await isAdmin(request, env))) return json({ error: "unauthorized" }, 401);
 
@@ -162,6 +178,64 @@ async function requestCleanup(request: Request, env: Env, tenantId: string): Pro
   return json({ cleanup_job: await getCleanupJob(env, id), idempotent_replay: false }, 201);
 }
 
+async function retryCleanup(request: Request, env: Env, cleanupJobId: string): Promise<Response> {
+  if (!(await isAdmin(request, env))) return json({ error: "unauthorized" }, 401);
+
+  const job = await getCleanupJob(env, cleanupJobId);
+  if (!job) return json({ error: "cleanup_job_not_found" }, 404);
+
+  const tenant = await env.DB.prepare(
+    `SELECT id, environment_kind, status, assigned_node_id, database_name
+       FROM tenants
+      WHERE id = ?`,
+  ).bind(job.tenant_id).first<TenantRow>();
+  if (!tenant) return json({ error: "tenant_not_found" }, 404);
+
+  const eligibilityError = cleanupRetryEligibility(job, tenant);
+  if (eligibilityError) return json({ error: eligibilityError }, 409);
+
+  const activeNode = await env.DB.prepare(
+    `SELECT id FROM nodes
+      WHERE id = ? AND lifecycle_state = 'active' AND revoked_at IS NULL`,
+  ).bind(job.node_id).first<{ id: string }>();
+  if (!activeNode) return json({ error: "cleanup_node_unavailable" }, 409);
+
+  const now = nowIso();
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM cleanup_operation_leases WHERE cleanup_job_id = ?`).bind(job.id),
+    env.DB.prepare(
+      `UPDATE cleanup_jobs
+          SET state = 'queued', error_code = NULL, started_at = NULL, finished_at = NULL, updated_at = ?
+        WHERE id = ? AND state = 'failed'`,
+    ).bind(now, job.id),
+    env.DB.prepare(
+      `UPDATE tenants SET status = 'suspended', updated_at = ? WHERE id = ? AND status = 'failed'`,
+    ).bind(now, tenant.id),
+    env.DB.prepare(
+      `INSERT INTO cleanup_job_events
+         (id, cleanup_job_id, event_type, from_state, to_state, payload, created_at)
+       VALUES (?, ?, 'cleanup.retry_queued', 'failed', 'queued', ?, ?)`,
+    ).bind(
+      crypto.randomUUID(),
+      job.id,
+      JSON.stringify({ previous_error_code: job.error_code }),
+      now,
+    ),
+    env.DB.prepare(
+      `INSERT INTO audit_events
+         (id, event_type, actor_type, actor_id, target_type, target_id, payload, created_at)
+       VALUES (?, 'cleanup.job.retry_queued', 'admin', 'admin-api', 'cleanup_job', ?, ?, ?)`,
+    ).bind(
+      crypto.randomUUID(),
+      job.id,
+      JSON.stringify({ tenant_id: tenant.id, previous_error_code: job.error_code }),
+      now,
+    ),
+  ]);
+
+  return json({ cleanup_job: await getCleanupJob(env, job.id), retried: true });
+}
+
 async function readCleanupJob(request: Request, env: Env, cleanupJobId: string): Promise<Response> {
   if (!(await isAdmin(request, env))) return json({ error: "unauthorized" }, 401);
   const cleanupJob = await getCleanupJob(env, cleanupJobId);
@@ -181,6 +255,11 @@ export async function handleCleanupAdminRoute(request: Request, env: Env): Promi
   const requestMatch = url.pathname.match(/^\/v1\/admin\/tenants\/([0-9a-f-]+)\/cleanup$/i);
   if (request.method === "POST" && requestMatch) {
     return await requestCleanup(request, env, requestMatch[1]);
+  }
+
+  const retryMatch = url.pathname.match(/^\/v1\/admin\/cleanup-jobs\/([0-9a-f-]+)\/retry$/i);
+  if (request.method === "POST" && retryMatch) {
+    return await retryCleanup(request, env, retryMatch[1]);
   }
 
   const readMatch = url.pathname.match(/^\/v1\/admin\/cleanup-jobs\/([0-9a-f-]+)$/i);
