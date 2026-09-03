@@ -429,6 +429,7 @@ class RestoreEngine:
                         "--no-owner",
                         "--no-privileges",
                         "--exit-on-error",
+                        f"--role={owner}",
                         f"--dbname={request.target_database_name}",
                     ],
                     timeout=1800,
