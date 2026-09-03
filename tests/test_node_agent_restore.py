@@ -14,7 +14,7 @@ from pydantic import SecretStr
 from dsx_node_agent import restore_operation
 from dsx_node_agent.operation_dispatch import parse_any_claimed_operation
 from dsx_node_agent.operations import OperationProtocolError
-from dsx_node_agent.provisioner import ProvisionerError
+from dsx_node_agent.provisioner import CommandResult, ProvisionerError
 from dsx_node_agent.restore_operation import (
     RestoreClaimedOperation,
     execute_restore_operation,
@@ -141,6 +141,17 @@ class FakeS3:
         return {"ContentLength": len(value), "Body": io.BytesIO(value)}
 
 
+class FakeModuleProvisioning:
+    def __init__(self, installed_modules: set[str]) -> None:
+        self.installed_modules = installed_modules
+
+    def _run_postgres(self, argv: list[str], **kwargs) -> CommandResult:
+        del kwargs
+        query = argv[-1]
+        installed = any(f"name = '{module}'" in query for module in self.installed_modules)
+        return CommandResult(returncode=0, stdout="1\n" if installed else "0\n")
+
+
 def test_restore_claim_is_strict_typed_and_test_only() -> None:
     claim, _ = restore_fixture()
     operation = parse_any_claimed_operation(claim)
@@ -260,3 +271,18 @@ def test_restore_tar_member_rejects_traversal_and_links() -> None:
     symlink.linkname = "/etc/shadow"
     with pytest.raises(ProvisionerError, match="restore_filestore_unsafe_member"):
         RestoreEngine._safe_member_relative(symlink, "source_db")
+
+
+def test_restore_module_baseline_must_be_installed() -> None:
+    engine = RestoreEngine(None, FakeModuleProvisioning({"pos_restaurant", "ds_pos_delivery"}))
+    engine._validate_required_modules(
+        "dsx_restaurant_restore_test",
+        frozenset({"pos_restaurant", "ds_pos_delivery"}),
+    )
+
+    incomplete = RestoreEngine(None, FakeModuleProvisioning({"pos_restaurant"}))
+    with pytest.raises(ProvisionerError, match="restore_required_module_not_installed"):
+        incomplete._validate_required_modules(
+            "dsx_restaurant_restore_test",
+            frozenset({"pos_restaurant", "ds_pos_delivery"}),
+        )
