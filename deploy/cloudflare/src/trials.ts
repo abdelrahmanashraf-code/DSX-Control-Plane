@@ -45,9 +45,13 @@ type TrialRow = {
   trial_requested_at: string | null;
   trial_started_at: string | null;
   trial_expires_at: string | null;
+  trial_expired_at: string | null;
   public_hostname: string | null;
   assigned_node_id: string | null;
   database_name: string | null;
+  cleanup_job_id: string | null;
+  cleanup_state: string | null;
+  cleanup_error_code: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -164,13 +168,24 @@ async function findJobForTenant(env: Env, tenantId: string): Promise<JobRow | nu
   ).bind(tenantId).first<JobRow>();
 }
 
+function trialSelectSql(whereClause: string): string {
+  return `SELECT t.id, t.name, t.slug, t.sector, t.environment_kind, t.status, t.trial_state,
+          t.trial_request_key, t.trial_requested_at, t.trial_started_at, t.trial_expires_at,
+          t.trial_expired_at, t.public_hostname, t.assigned_node_id, t.database_name,
+          (SELECT c.id FROM cleanup_jobs c WHERE c.tenant_id = t.id ORDER BY c.created_at DESC LIMIT 1)
+            AS cleanup_job_id,
+          (SELECT c.state FROM cleanup_jobs c WHERE c.tenant_id = t.id ORDER BY c.created_at DESC LIMIT 1)
+            AS cleanup_state,
+          (SELECT c.error_code FROM cleanup_jobs c WHERE c.tenant_id = t.id ORDER BY c.created_at DESC LIMIT 1)
+            AS cleanup_error_code,
+          t.created_at, t.updated_at
+     FROM tenants t
+    ${whereClause}`;
+}
+
 async function getTrialByRequestKey(env: Env, requestKey: string): Promise<TrialRow | null> {
   return await env.DB.prepare(
-    `SELECT id, name, slug, sector, environment_kind, status, trial_state, trial_request_key,
-            trial_requested_at, trial_started_at, trial_expires_at, public_hostname,
-            assigned_node_id, database_name, created_at, updated_at
-       FROM tenants
-      WHERE environment_kind = 'trial' AND trial_request_key = ?`,
+    trialSelectSql("WHERE t.environment_kind = 'trial' AND t.trial_request_key = ?"),
   ).bind(requestKey).first<TrialRow>();
 }
 
@@ -318,13 +333,9 @@ async function createTrial(request: Request, env: Env): Promise<Response> {
 async function listTrials(request: Request, env: Env): Promise<Response> {
   if (!(await isAdmin(request, env))) return json({ error: "unauthorized" }, 401);
   const result = await env.DB.prepare(
-    `SELECT id, name, slug, sector, environment_kind, status, trial_state, trial_request_key,
-            trial_requested_at, trial_started_at, trial_expires_at, public_hostname,
-            assigned_node_id, database_name, created_at, updated_at
-       FROM tenants
-      WHERE environment_kind = 'trial'
-      ORDER BY created_at DESC
-      LIMIT 500`,
+    `${trialSelectSql("WHERE t.environment_kind = 'trial'")}
+     ORDER BY t.created_at DESC
+     LIMIT 500`,
   ).all<TrialRow>();
   return json({ trials: result.results });
 }
