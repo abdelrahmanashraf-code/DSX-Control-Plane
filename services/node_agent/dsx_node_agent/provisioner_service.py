@@ -24,6 +24,7 @@ from dsx_node_agent.provisioner import (
     load_secure_config,
     parse_request,
 )
+from dsx_node_agent.restore_service import RestoreEngine, parse_restore_request
 
 _MAX_REQUEST_BYTES = 16 * 1024
 _MAX_RESPONSE_BYTES = 8 * 1024
@@ -32,6 +33,7 @@ _ALLOWED_CLEANUP = "cleanup_test_odoo_environment"
 _ALLOWED_BACKUP = "backup_odoo_environment"
 _ALLOWED_BACKUP_STAGE = "stage_backup_for_upload"
 _ALLOWED_BACKUP_PURGE = "purge_verified_backup"
+_ALLOWED_RESTORE = "restore_verified_backup"
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SAFE_DATABASE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 _DROPDB = "/usr/bin/dropdb"
@@ -270,6 +272,9 @@ class _TypedRequestHandler(socketserver.StreamRequestHandler):
                     result = self.server.backup_stager.stage(request)  # type: ignore[attr-defined]
                 else:
                     result = self.server.backup_stager.purge(request)  # type: ignore[attr-defined]
+            elif operation_type == _ALLOWED_RESTORE:
+                request = parse_restore_request(payload)
+                result = self.server.restore.restore(request)  # type: ignore[attr-defined]
             else:
                 raise ProvisionerError("unsupported_operation_type")
             self._write(result)
@@ -293,11 +298,13 @@ class _TypedUnixServer(socketserver.UnixStreamServer):
         cleanup: CleanupEngine,
         backup: BackupEngine,
         backup_stager: BackupArtifactStager,
+        restore: RestoreEngine,
     ) -> None:
         self.provisioning = provisioning
         self.cleanup = cleanup
         self.backup = backup
         self.backup_stager = backup_stager
+        self.restore = restore
         super().__init__(socket_path, _TypedRequestHandler)
 
 
@@ -313,8 +320,9 @@ def serve(config_path: Path, socket_path: Path) -> None:
     cleanup = CleanupEngine(config, provisioning)
     backup = BackupEngine(config, provisioning)
     backup_stager = BackupArtifactStager(config)
+    restore = RestoreEngine(config, provisioning)
     server = _TypedUnixServer(
-        str(socket_path), provisioning, cleanup, backup, backup_stager
+        str(socket_path), provisioning, cleanup, backup, backup_stager, restore
     )
     os.chmod(socket_path, 0o660)
     try:
@@ -329,7 +337,7 @@ def serve(config_path: Path, socket_path: Path) -> None:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="DSX typed local provisioning, cleanup and backup helper"
+        description="DSX typed local provisioning, cleanup, backup and restore helper"
     )
     sub = parser.add_subparsers(dest="command", required=True)
     serve_parser = sub.add_parser("serve")
