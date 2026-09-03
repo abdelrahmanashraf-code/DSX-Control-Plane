@@ -8,6 +8,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from dsx_node_agent.backup_operation import (
+    BackupClaimedOperation,
+    execute_backup_operation,
+    parse_backup_claimed_operation,
+)
 from dsx_node_agent.operations import (
     ClaimedOperation,
     OperationExecutionResult,
@@ -18,6 +23,7 @@ from dsx_node_agent.operations import (
 
 _CLEANUP_OPERATION = "cleanup_test_odoo_environment"
 _PROVISION_OPERATION = "provision_odoo_environment"
+_BACKUP_OPERATION = "backup_odoo_environment"
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SAFE_DATABASE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 _SAFE_CODE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,119}$")
@@ -42,7 +48,7 @@ class CleanupClaimedOperation:
     payload: CleanupEnvironmentPayload
 
 
-type AnyClaimedOperation = ClaimedOperation | CleanupClaimedOperation
+type AnyClaimedOperation = ClaimedOperation | CleanupClaimedOperation | BackupClaimedOperation
 
 
 def _string(value: Any, *, max_length: int, field: str) -> str:
@@ -155,6 +161,8 @@ def parse_any_claimed_operation(response_payload: Any) -> AnyClaimedOperation | 
         return parse_claimed_operation(response_payload)
     if operation_type == _CLEANUP_OPERATION:
         return _parse_cleanup_claim(response_payload)
+    if operation_type == _BACKUP_OPERATION:
+        return parse_backup_claimed_operation(response_payload)
     raise OperationProtocolError("unsupported_operation_type")
 
 
@@ -226,6 +234,12 @@ def execute_any_operation(
 ) -> OperationExecutionResult:
     if isinstance(operation, CleanupClaimedOperation):
         return _execute_cleanup(
+            operation,
+            provisioner_socket=provisioner_socket,
+            timeout_seconds=timeout_seconds,
+        )
+    if isinstance(operation, BackupClaimedOperation):
+        return execute_backup_operation(
             operation,
             provisioner_socket=provisioner_socket,
             timeout_seconds=timeout_seconds,
