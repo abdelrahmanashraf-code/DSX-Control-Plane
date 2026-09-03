@@ -1,6 +1,7 @@
 import { listOperationalAlerts } from "./alerts";
 import { handleBackupAdminRoute } from "./backups";
 import { handleBackupOperationRoute } from "./backupOperations";
+import { handleBackupUploadOperationRoute } from "./backupUploadOperations";
 import { handleCleanupAdminRoute } from "./cleanup";
 import { handleCleanupOperationRoute } from "./cleanupOperations";
 import { listNodeHealthHistory } from "./healthHistory";
@@ -31,6 +32,9 @@ export default {
     if (request.method === "GET" && historyMatch) {
       return await listNodeHealthHistory(request, env, historyMatch[1]);
     }
+
+    const backupUploadOperationResponse = await handleBackupUploadOperationRoute(request, env);
+    if (backupUploadOperationResponse) return backupUploadOperationResponse;
 
     const backupOperationResponse = await handleBackupOperationRoute(request, env);
     if (backupOperationResponse) return backupOperationResponse;
