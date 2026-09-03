@@ -9,6 +9,7 @@ export type BackupState =
   | "queued"
   | "dispatched"
   | "running"
+  | "prepared"
   | "uploaded"
   | "verified"
   | "failed";
@@ -45,6 +46,7 @@ type BackupJobRow = {
   created_at: string;
   updated_at: string;
   started_at: string | null;
+  prepared_at: string | null;
   uploaded_at: string | null;
   verified_at: string | null;
   finished_at: string | null;
@@ -153,7 +155,7 @@ async function getBackupJob(env: Env, id: string): Promise<BackupJobRow | null> 
     `SELECT id, tenant_id, provisioning_job_id, template_id, node_id, database_name,
             environment_kind, backup_type, state, idempotency_key, attempt, error_code,
             total_size_bytes, manifest_sha256, created_at, updated_at, started_at,
-            uploaded_at, verified_at, finished_at
+            prepared_at, uploaded_at, verified_at, finished_at
        FROM backup_jobs
       WHERE id = ?`,
   ).bind(id).first<BackupJobRow>();
@@ -175,7 +177,7 @@ async function createBackupJob(request: Request, env: Env): Promise<Response> {
     `SELECT id, tenant_id, provisioning_job_id, template_id, node_id, database_name,
             environment_kind, backup_type, state, idempotency_key, attempt, error_code,
             total_size_bytes, manifest_sha256, created_at, updated_at, started_at,
-            uploaded_at, verified_at, finished_at
+            prepared_at, uploaded_at, verified_at, finished_at
        FROM backup_jobs
       WHERE tenant_id = ? AND idempotency_key = ?`,
   ).bind(input.tenant_id, input.idempotency_key).first<BackupJobRow>();
@@ -270,7 +272,7 @@ async function listBackupJobs(request: Request, env: Env): Promise<Response> {
     `SELECT id, tenant_id, provisioning_job_id, template_id, node_id, database_name,
             environment_kind, backup_type, state, idempotency_key, attempt, error_code,
             total_size_bytes, manifest_sha256, created_at, updated_at, started_at,
-            uploaded_at, verified_at, finished_at
+            prepared_at, uploaded_at, verified_at, finished_at
        FROM backup_jobs
       ORDER BY created_at DESC
       LIMIT 500`,
