@@ -4,7 +4,6 @@ import grp
 import hashlib
 import json
 import os
-import pwd
 import stat
 from pathlib import Path
 
