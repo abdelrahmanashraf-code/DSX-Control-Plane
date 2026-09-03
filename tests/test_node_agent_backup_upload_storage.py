@@ -1,5 +1,3 @@
-# ruff: noqa: I001
-
 import hashlib
 import io
 from pathlib import Path
