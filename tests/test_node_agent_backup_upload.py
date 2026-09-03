@@ -1,9 +1,13 @@
+# ruff: noqa: I001
+
 import grp
 import hashlib
 import json
 import os
 import pwd
 from pathlib import Path
+
+import pytest
 
 from dsx_node_agent.backup_stage_service import BackupArtifactStager, parse_backup_stage_request
 from dsx_node_agent.backup_upload import (
@@ -14,7 +18,6 @@ from dsx_node_agent.backup_upload import (
 from dsx_node_agent.operation_dispatch import parse_any_claimed_operation
 from dsx_node_agent.operations import OperationProtocolError
 from dsx_node_agent.provisioner import ProvisionerConfig
-import pytest
 
 
 SHA_A = hashlib.sha256(b"DATABASE").hexdigest()
