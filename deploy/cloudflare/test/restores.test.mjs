@@ -101,7 +101,7 @@ test("long restore slug truncates slug only and preserves local database prefix"
   assert.ok(value.startsWith("dsx_restaurant_restore_"));
   assert.ok(value.endsWith("_2a2645e9"));
   assert.ok(value.length <= 63);
-  assert.equal(value, "dsx_restaurant_restore_phase4_restore_ownership_ga_2a2645e9");
+  assert.equal(value, "dsx_restaurant_restore_phase4_restore_ownership_gate_2_2a2645e9");
 });
 
 test("restore requires exact verified remote artifact set", () => {
