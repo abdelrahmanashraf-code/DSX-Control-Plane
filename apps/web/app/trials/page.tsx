@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "../admin-shell";
-import { createTrial, field, getTrialsData } from "@/lib/control-plane";
+import { createTrial, field, getTrialsData, retryTrialCleanup } from "@/lib/control-plane";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,8 @@ const SECTORS = [
   ["retail", "محلات / Retail"],
   ["supermarket", "سوبر ماركت"],
 ] as const;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function StatusPill({ value }: { value: string }) {
   const safe = value.toLowerCase().replace(/[^a-z0-9_-]/g, "");
@@ -58,8 +60,26 @@ async function createTrialAction(formData: FormData) {
   redirect("/trials?created=1");
 }
 
+async function retryCleanupAction(formData: FormData) {
+  "use server";
+
+  const tenantId = String(formData.get("tenant_id") ?? "").trim();
+  if (!UUID.test(tenantId)) redirect("/trials?error=invalid_trial_id");
+
+  try {
+    await retryTrialCleanup(tenantId);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "control_plane_unavailable";
+    redirect(`/trials?error=${encodeURIComponent(code)}`);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/trials");
+  redirect("/trials?retried=1");
+}
+
 type TrialsPageProps = {
-  searchParams: Promise<{ created?: string; error?: string }>;
+  searchParams: Promise<{ created?: string; retried?: string; error?: string }>;
 };
 
 export default async function TrialsPage({ searchParams }: TrialsPageProps) {
@@ -104,9 +124,13 @@ export default async function TrialsPage({ searchParams }: TrialsPageProps) {
         <div className="notice success">تم تسجيل طلب التجربة وإرساله تلقائيًا لمسار الـProvisioning.</div>
       )}
 
+      {params.retried === "1" && (
+        <div className="notice success">تمت إعادة محاولة تنظيف التجربة بأمان.</div>
+      )}
+
       {params.error && (
         <div className="notice danger">
-          لم يتم إنشاء التجربة: <code>{params.error}</code>
+          تعذر تنفيذ الطلب: <code>{params.error}</code>
         </div>
       )}
 
@@ -199,30 +223,58 @@ export default async function TrialsPage({ searchParams }: TrialsPageProps) {
                   <th>العميل</th>
                   <th>القطاع</th>
                   <th>الحالة</th>
+                  <th>التنظيف</th>
                   <th>قاعدة البيانات</th>
                   <th>الدومين</th>
                   <th>بدأت</th>
                   <th>تنتهي</th>
+                  <th>إجراء</th>
                 </tr>
               </thead>
               <tbody>
                 {data.trials.length === 0 ? (
-                  <tr><td colSpan={7} className="empty">لا توجد تجارب حتى الآن.</td></tr>
+                  <tr><td colSpan={9} className="empty">لا توجد تجارب حتى الآن.</td></tr>
                 ) : (
-                  data.trials.map((trial) => (
-                    <tr key={field(trial, "id")}>
-                      <td>
-                        <strong>{field(trial, "name")}</strong>
-                        <small>{field(trial, "slug")}</small>
-                      </td>
-                      <td>{field(trial, "sector")}</td>
-                      <td><StatusPill value={field(trial, "trial_state", field(trial, "status"))} /></td>
-                      <td><code>{field(trial, "database_name")}</code></td>
-                      <td><code>{field(trial, "public_hostname")}</code></td>
-                      <td>{dateTime(field(trial, "trial_started_at"))}</td>
-                      <td>{dateTime(field(trial, "trial_expires_at"))}</td>
-                    </tr>
-                  ))
+                  data.trials.map((trial) => {
+                    const tenantId = field(trial, "id", "");
+                    const trialState = field(trial, "trial_state", field(trial, "status"));
+                    const cleanupState = field(trial, "cleanup_state", "");
+                    const cleanupError = field(trial, "cleanup_error_code", "");
+                    const canRetry = trialState === "failed" && cleanupState === "failed" && UUID.test(tenantId);
+                    const expiredAt = field(trial, "trial_expired_at", "");
+
+                    return (
+                      <tr key={tenantId}>
+                        <td>
+                          <strong>{field(trial, "name")}</strong>
+                          <small>{field(trial, "slug")}</small>
+                        </td>
+                        <td>{field(trial, "sector")}</td>
+                        <td><StatusPill value={trialState} /></td>
+                        <td className="cleanup-cell">
+                          {cleanupState ? <StatusPill value={cleanupState} /> : <span className="muted">—</span>}
+                          {cleanupError && <small>{cleanupError}</small>}
+                        </td>
+                        <td><code>{field(trial, "database_name")}</code></td>
+                        <td><code>{field(trial, "public_hostname")}</code></td>
+                        <td>{dateTime(field(trial, "trial_started_at"))}</td>
+                        <td>
+                          {dateTime(field(trial, "trial_expires_at"))}
+                          {expiredAt && <small>انتهت فعليًا: {dateTime(expiredAt)}</small>}
+                        </td>
+                        <td>
+                          {canRetry ? (
+                            <form action={retryCleanupAction}>
+                              <input type="hidden" name="tenant_id" value={tenantId} />
+                              <button type="submit" className="retry-button">إعادة التنظيف</button>
+                            </form>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
