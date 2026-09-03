@@ -381,6 +381,33 @@ class RestoreEngine:
             raise ProvisionerError("postgres_inventory_failed")
         return result.stdout.strip() or None
 
+    def _validate_required_modules(
+        self,
+        database_name: str,
+        required_modules: frozenset[str],
+    ) -> None:
+        for module in sorted(required_modules):
+            result = self.provisioning._run_postgres(
+                [
+                    _PSQL,
+                    "-X",
+                    "-A",
+                    "-t",
+                    "-q",
+                    "--no-password",
+                    f"--dbname={database_name}",
+                    "--command",
+                    (
+                        "SELECT CASE WHEN EXISTS (SELECT 1 FROM ir_module_module "
+                        f"WHERE name = '{module}' AND state = 'installed') THEN 1 ELSE 0 END;"
+                    ),
+                ],
+                timeout=10,
+                capture_stdout=True,
+            )
+            if result.returncode != 0 or result.stdout.strip() != "1":
+                raise ProvisionerError("restore_required_module_not_installed")
+
     def _create_and_restore_database(self, request: RestoreRequest, dump_path: Path, owner: str) -> None:
         created = self.provisioning._run_postgres(
             [
@@ -481,7 +508,13 @@ class RestoreEngine:
             timeout=60,
         )
 
-    def _validated_replay(self, request: RestoreRequest, profile_owner: str, target_filestore: Path) -> bool:
+    def _validated_replay(
+        self,
+        request: RestoreRequest,
+        profile_owner: str,
+        target_filestore: Path,
+        required_modules: frozenset[str],
+    ) -> bool:
         if not self.provisioning._database_exists(request.target_database_name):
             return False
         marker = self._read_full_marker(request.target_database_name)
@@ -493,6 +526,7 @@ class RestoreEngine:
             raise ProvisionerError("restore_filestore_missing")
         if not self.provisioning._source_is_odoo(request.target_database_name):
             raise ProvisionerError("restore_odoo_schema_invalid")
+        self._validate_required_modules(request.target_database_name, required_modules)
         return True
 
     def restore(self, request: RestoreRequest) -> dict[str, str]:
@@ -513,7 +547,12 @@ class RestoreEngine:
 
         root = profile.filestore_root.resolve()
         target_filestore = root / request.target_database_name
-        if self._validated_replay(request, profile.database_owner, target_filestore):
+        if self._validated_replay(
+            request,
+            profile.database_owner,
+            target_filestore,
+            profile.allowed_modules,
+        ):
             return {"state": "validated", "database_name": request.target_database_name}
         if target_filestore.exists() or target_filestore.is_symlink():
             raise ProvisionerError("restore_filestore_name_conflict")
@@ -540,6 +579,7 @@ class RestoreEngine:
                 request.source_provisioning_operation_id,
             ):
                 raise ProvisionerError("restore_source_marker_mismatch")
+            self._validate_required_modules(request.target_database_name, profile.allowed_modules)
 
             self._write_target_marker(request)
             if self._read_full_marker(request.target_database_name) != (
