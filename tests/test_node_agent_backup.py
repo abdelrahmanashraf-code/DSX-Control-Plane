@@ -5,7 +5,6 @@ import pwd
 from pathlib import Path
 
 import pytest
-
 from dsx_node_agent.backup_operation import BackupClaimedOperation
 from dsx_node_agent.backup_service import BackupEngine, parse_backup_request
 from dsx_node_agent.operation_dispatch import execute_any_operation, parse_any_claimed_operation
