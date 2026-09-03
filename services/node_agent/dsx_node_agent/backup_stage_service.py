@@ -4,9 +4,9 @@ import grp
 import hashlib
 import json
 import os
-import pwd
 import re
 import shutil
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -180,14 +180,14 @@ class BackupArtifactStager:
         self,
         config: ProvisionerConfig,
         *,
-        outbox_root: Path = Path("/var/lib/dsx-node-agent/backup-outbox"),
-        export_user: str = "dsx-agent",
+        outbox_root: Path = Path("/var/lib/dsx-backup-outbox"),
         export_group: str = "dsx-agent",
+        outbox_owner_uid: int = 0,
     ) -> None:
         self.config = config
         self.outbox_root = outbox_root
-        self.export_user = export_user
         self.export_group = export_group
+        self.outbox_owner_uid = outbox_owner_uid
 
     def _workspace_files(self, request: BackupStageRequest) -> dict[str, Path]:
         if not self.config.enabled or self.config.phase != "test-only":
@@ -237,31 +237,43 @@ class BackupArtifactStager:
             files[artifact.artifact_kind] = path
         return files
 
-    def stage(self, request: BackupStageRequest) -> dict[str, str]:
-        files = self._workspace_files(request)
-        if self.outbox_root.is_symlink() or not self.outbox_root.is_dir():
-            raise ProvisionerError("backup_outbox_unavailable")
+    def _validated_outbox_group(self) -> int:
         try:
-            uid = pwd.getpwnam(self.export_user).pw_uid
             gid = grp.getgrnam(self.export_group).gr_gid
         except KeyError as exc:
             raise ProvisionerError("backup_outbox_account_missing") from exc
+        if self.outbox_root.is_symlink() or not self.outbox_root.is_dir():
+            raise ProvisionerError("backup_outbox_unavailable")
+        try:
+            info = self.outbox_root.stat()
+        except OSError as exc:
+            raise ProvisionerError("backup_outbox_unavailable") from exc
+        if info.st_uid != self.outbox_owner_uid or info.st_gid != gid:
+            raise ProvisionerError("backup_outbox_owner_mismatch")
+        if stat.S_IMODE(info.st_mode) & 0o022:
+            raise ProvisionerError("backup_outbox_permissions_insecure")
+        return gid
+
+    def stage(self, request: BackupStageRequest) -> dict[str, str]:
+        files = self._workspace_files(request)
+        gid = self._validated_outbox_group()
 
         target = self.outbox_root / request.operation_id
         if target.is_symlink():
             raise ProvisionerError("backup_outbox_conflict")
         if target.exists():
-            if not target.is_dir():
+            if not target.is_dir() or target.stat().st_uid != self.outbox_owner_uid:
                 raise ProvisionerError("backup_outbox_conflict")
             shutil.rmtree(target)
         try:
-            target.mkdir(mode=0o700)
-            os.chown(target, uid, gid)
+            target.mkdir(mode=0o750)
+            os.chown(target, self.outbox_owner_uid, gid)
+            os.chmod(target, 0o750)
             for artifact in request.artifacts:
                 destination = target / _ARTIFACT_FILES[artifact.artifact_kind]
                 shutil.copyfile(files[artifact.artifact_kind], destination)
-                os.chmod(destination, 0o600)
-                os.chown(destination, uid, gid)
+                os.chown(destination, self.outbox_owner_uid, gid)
+                os.chmod(destination, 0o440)
         except OSError as exc:
             shutil.rmtree(target, ignore_errors=True)
             raise ProvisionerError("backup_outbox_stage_failed") from exc
@@ -269,6 +281,7 @@ class BackupArtifactStager:
 
     def purge(self, request: BackupStageRequest) -> dict[str, str]:
         self._workspace_files(request)
+        self._validated_outbox_group()
         workspace = self.config.work_root / "backups" / request.operation_id
         target = self.outbox_root / request.operation_id
         if target.is_symlink():
@@ -276,7 +289,11 @@ class BackupArtifactStager:
         try:
             shutil.rmtree(workspace)
             if target.exists():
+                if not target.is_dir() or target.stat().st_uid != self.outbox_owner_uid:
+                    raise ProvisionerError("backup_outbox_conflict")
                 shutil.rmtree(target)
+        except ProvisionerError:
+            raise
         except OSError as exc:
             raise ProvisionerError("backup_local_purge_failed") from exc
         return {"state": "purged"}

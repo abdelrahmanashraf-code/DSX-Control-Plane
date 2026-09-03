@@ -49,7 +49,7 @@ class AgentSettings(BaseSettings):
     backup_s3_region: str = Field(default="auto", min_length=1, max_length=64)
     backup_s3_access_key_id: SecretStr | None = None
     backup_s3_secret_access_key: SecretStr | None = None
-    backup_outbox_root: Path = Field(default=Path("/var/lib/dsx-node-agent/backup-outbox"))
+    backup_outbox_root: Path = Field(default=Path("/var/lib/dsx-backup-outbox"))
 
     @property
     def base_url(self) -> str:

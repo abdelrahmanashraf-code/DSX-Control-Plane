@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import pwd
+import stat
 from pathlib import Path
 
 import pytest
@@ -124,7 +125,7 @@ def test_stage_parser_rejects_paths_and_secrets() -> None:
         parse_backup_stage_request(unsafe)
 
 
-def test_stager_exports_verified_workspace_and_purges_it(tmp_path: Path) -> None:
+def test_stager_exports_read_only_workspace_and_root_purges_it(tmp_path: Path) -> None:
     claim = valid_upload_claim()
     request = parse_backup_stage_request(local_stage_request())
     work_root = tmp_path / "work"
@@ -135,8 +136,8 @@ def test_stager_exports_verified_workspace_and_purges_it(tmp_path: Path) -> None
     (workspace / "manifest.json").write_bytes(claim["manifest_bytes"])
 
     outbox = tmp_path / "outbox"
-    outbox.mkdir(mode=0o700)
-    user = pwd.getpwuid(os.getuid()).pw_name
+    outbox.mkdir(mode=0o750)
+    user_uid = os.getuid()
     group = grp.getgrgid(os.getgid()).gr_name
     config = ProvisionerConfig(
         enabled=True,
@@ -148,15 +149,18 @@ def test_stager_exports_verified_workspace_and_purges_it(tmp_path: Path) -> None
     stager = BackupArtifactStager(
         config,
         outbox_root=outbox,
-        export_user=user,
         export_group=group,
+        outbox_owner_uid=user_uid,
     )
 
     assert stager.stage(request) == {"state": "staged"}
     staged = outbox / request.operation_id
+    assert stat.S_IMODE(staged.stat().st_mode) == 0o750
     assert (staged / "database.dump").read_bytes() == b"DATABASE"
     assert (staged / "filestore.tar.gz").read_bytes() == b"FILESTORE"
     assert (staged / "manifest.json").read_bytes() == claim["manifest_bytes"]
+    for name in ("database.dump", "filestore.tar.gz", "manifest.json"):
+        assert stat.S_IMODE((staged / name).stat().st_mode) == 0o440
 
     purge_payload = local_stage_request()
     purge_payload["type"] = "purge_verified_backup"
@@ -164,3 +168,33 @@ def test_stager_exports_verified_workspace_and_purges_it(tmp_path: Path) -> None
     assert stager.purge(purge) == {"state": "purged"}
     assert not workspace.exists()
     assert not staged.exists()
+
+
+def test_stager_rejects_group_writable_outbox(tmp_path: Path) -> None:
+    request = parse_backup_stage_request(local_stage_request())
+    work_root = tmp_path / "work"
+    workspace = work_root / "backups" / request.operation_id
+    workspace.mkdir(parents=True)
+    claim = valid_upload_claim()
+    (workspace / "database.dump").write_bytes(b"DATABASE")
+    (workspace / "filestore.tar.gz").write_bytes(b"FILESTORE")
+    (workspace / "manifest.json").write_bytes(claim["manifest_bytes"])
+
+    outbox = tmp_path / "outbox"
+    outbox.mkdir(mode=0o770)
+    os.chmod(outbox, 0o770)
+    config = ProvisionerConfig(
+        enabled=True,
+        phase="test-only",
+        postgres_os_user="postgres",
+        work_root=work_root,
+        profiles={},
+    )
+    stager = BackupArtifactStager(
+        config,
+        outbox_root=outbox,
+        export_group=grp.getgrgid(os.getgid()).gr_name,
+        outbox_owner_uid=os.getuid(),
+    )
+    with pytest.raises(Exception, match="backup_outbox_permissions_insecure"):
+        stager.stage(request)

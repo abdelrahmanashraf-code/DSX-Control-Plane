@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import shutil
 import socket
 from dataclasses import dataclass
 from datetime import datetime
@@ -326,7 +325,12 @@ def _storage_client(settings: AgentSettings) -> Any:
     )
 
 
-def _verify_remote_object(client: Any, bucket: str, object_key: str, expected: ExpectedUploadArtifact) -> None:
+def _verify_remote_object(
+    client: Any,
+    bucket: str,
+    object_key: str,
+    expected: ExpectedUploadArtifact,
+) -> None:
     response = client.get_object(Bucket=bucket, Key=object_key)
     if int(response.get("ContentLength", -1)) != expected.size_bytes:
         raise OperationProtocolError("backup_storage_size_mismatch")
@@ -404,7 +408,6 @@ def execute_backup_upload_operation(
                 }
             )
 
-        shutil.rmtree(settings.backup_outbox_root / operation.operation_id, ignore_errors=True)
         return BackupUploadExecutionResult(state="verified", backup_artifacts=tuple(verified))
     except OperationProtocolError as exc:
         return BackupUploadExecutionResult(state="failed", error_code=str(exc))
