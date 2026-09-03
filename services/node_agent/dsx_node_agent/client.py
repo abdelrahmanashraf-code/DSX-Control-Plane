@@ -80,6 +80,9 @@ class ControlPlaneClient:
         state: str,
         error_code: str | None = None,
         database_name: str | None = None,
+        backup_artifacts: tuple[dict[str, object], ...] | None = None,
+        manifest_sha256: str | None = None,
+        total_size_bytes: int | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "lease_token": lease_token,
@@ -89,6 +92,12 @@ class ControlPlaneClient:
             payload["error_code"] = error_code
         if database_name is not None:
             payload["database_name"] = database_name
+        if backup_artifacts is not None:
+            payload["artifacts"] = list(backup_artifacts)
+        if manifest_sha256 is not None:
+            payload["manifest_sha256"] = manifest_sha256
+        if total_size_bytes is not None:
+            payload["total_size_bytes"] = total_size_bytes
 
         response = httpx.post(
             f"{self.settings.base_url}/v1/nodes/{identity.node_id}/operations/{operation_id}/result",
