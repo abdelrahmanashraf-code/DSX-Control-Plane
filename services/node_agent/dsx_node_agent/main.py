@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 import httpx
 
+from dsx_node_agent.backup_upload import BackupUploadClaimedOperation, purge_verified_backup_local
 from dsx_node_agent.client import ControlPlaneClient
 from dsx_node_agent.metrics import collect_node_metrics
 from dsx_node_agent.operation_dispatch import (
@@ -67,6 +68,7 @@ def _start_one_operation(
         claimed,
         provisioner_socket=socket_path,
         timeout_seconds=settings.provisioner_timeout_seconds,
+        settings=settings,
     )
     return ActiveOperation(
         operation=claimed,
@@ -104,6 +106,20 @@ def _advance_active_operation(
             manifest_sha256=getattr(result, "manifest_sha256", None),
             total_size_bytes=getattr(result, "total_size_bytes", None),
         )
+        if isinstance(active.operation, BackupUploadClaimedOperation) and result.state == "verified":
+            purged = purge_verified_backup_local(
+                active.operation,
+                provisioner_socket=(
+                    settings.provisioner_socket if settings.enable_provisioning_execution else None
+                ),
+                timeout_seconds=settings.provisioner_timeout_seconds,
+            )
+            if not purged:
+                print(
+                    f"verified backup local purge deferred id={active.operation.operation_id}",
+                    file=sys.stderr,
+                    flush=True,
+                )
         return True
 
     if now >= active.next_lease_renewal:

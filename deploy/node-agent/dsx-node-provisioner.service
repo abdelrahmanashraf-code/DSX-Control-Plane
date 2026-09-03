@@ -29,7 +29,7 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
 RestrictAddressFamilies=AF_UNIX
-ReadWritePaths=/var/lib/dsx-provisioner /var/lib/odoo/.local/share/Odoo/filestore
+ReadWritePaths=/var/lib/dsx-provisioner /var/lib/odoo/.local/share/Odoo/filestore /var/lib/dsx-node-agent/backup-outbox
 CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID
 UMask=0007
 

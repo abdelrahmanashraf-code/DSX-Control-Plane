@@ -42,6 +42,15 @@ class AgentSettings(BaseSettings):
     provisioner_socket: Path = Field(default=Path("/run/dsx-provisioner/provisioner.sock"))
     provisioner_timeout_seconds: float = Field(default=1800.0, ge=30.0, le=3600.0)
 
+    # Backup object-storage credentials are node-local only. They are never supplied by
+    # Control Plane operation payloads. Phase 4 uses an S3-compatible Cloudflare R2 bucket.
+    backup_s3_endpoint_url: str | None = None
+    backup_s3_bucket: str | None = None
+    backup_s3_region: str = Field(default="auto", min_length=1, max_length=64)
+    backup_s3_access_key_id: SecretStr | None = None
+    backup_s3_secret_access_key: SecretStr | None = None
+    backup_outbox_root: Path = Field(default=Path("/var/lib/dsx-node-agent/backup-outbox"))
+
     @property
     def base_url(self) -> str:
         return self.control_plane_url.rstrip("/")

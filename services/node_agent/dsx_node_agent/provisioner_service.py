@@ -13,6 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from dsx_node_agent.backup_service import BackupEngine, parse_backup_request
+from dsx_node_agent.backup_stage_service import (
+    BackupArtifactStager,
+    parse_backup_stage_request,
+)
 from dsx_node_agent.provisioner import (
     ProvisionerConfig,
     ProvisionerError,
@@ -26,6 +30,8 @@ _MAX_RESPONSE_BYTES = 8 * 1024
 _ALLOWED_PROVISION = "provision_odoo_environment"
 _ALLOWED_CLEANUP = "cleanup_test_odoo_environment"
 _ALLOWED_BACKUP = "backup_odoo_environment"
+_ALLOWED_BACKUP_STAGE = "stage_backup_for_upload"
+_ALLOWED_BACKUP_PURGE = "purge_verified_backup"
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SAFE_DATABASE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 _DROPDB = "/usr/bin/dropdb"
@@ -258,6 +264,12 @@ class _TypedRequestHandler(socketserver.StreamRequestHandler):
             elif operation_type == _ALLOWED_BACKUP:
                 request = parse_backup_request(payload)
                 result = self.server.backup.backup(request)  # type: ignore[attr-defined]
+            elif operation_type in {_ALLOWED_BACKUP_STAGE, _ALLOWED_BACKUP_PURGE}:
+                request = parse_backup_stage_request(payload)
+                if operation_type == _ALLOWED_BACKUP_STAGE:
+                    result = self.server.backup_stager.stage(request)  # type: ignore[attr-defined]
+                else:
+                    result = self.server.backup_stager.purge(request)  # type: ignore[attr-defined]
             else:
                 raise ProvisionerError("unsupported_operation_type")
             self._write(result)
@@ -280,10 +292,12 @@ class _TypedUnixServer(socketserver.UnixStreamServer):
         provisioning: ProvisioningEngine,
         cleanup: CleanupEngine,
         backup: BackupEngine,
+        backup_stager: BackupArtifactStager,
     ) -> None:
         self.provisioning = provisioning
         self.cleanup = cleanup
         self.backup = backup
+        self.backup_stager = backup_stager
         super().__init__(socket_path, _TypedRequestHandler)
 
 
@@ -298,7 +312,10 @@ def serve(config_path: Path, socket_path: Path) -> None:
     provisioning = ProvisioningEngine(config)
     cleanup = CleanupEngine(config, provisioning)
     backup = BackupEngine(config, provisioning)
-    server = _TypedUnixServer(str(socket_path), provisioning, cleanup, backup)
+    backup_stager = BackupArtifactStager(config)
+    server = _TypedUnixServer(
+        str(socket_path), provisioning, cleanup, backup, backup_stager
+    )
     os.chmod(socket_path, 0o660)
     try:
         server.serve_forever(poll_interval=0.5)
@@ -311,7 +328,9 @@ def serve(config_path: Path, socket_path: Path) -> None:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="DSX typed local provisioning, cleanup and backup helper")
+    parser = argparse.ArgumentParser(
+        description="DSX typed local provisioning, cleanup and backup helper"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     serve_parser = sub.add_parser("serve")
     serve_parser.add_argument("--config", type=Path, default=Path("/etc/dsx-provisioner.json"))
