@@ -37,6 +37,23 @@ function slots(node: JsonRecord): number | null {
   return Math.max(0, max - used);
 }
 
+function metric(
+  node: JsonRecord,
+  flatKey: string,
+  groupKey?: string,
+  nestedKey?: string,
+): number | null {
+  const flat = nestedNumberField(node, "metrics", flatKey);
+  if (flat !== null || !groupKey || !nestedKey) return flat;
+
+  const metricsValue = node.metrics;
+  if (!metricsValue || typeof metricsValue !== "object" || Array.isArray(metricsValue)) return null;
+  const group = (metricsValue as JsonRecord)[groupKey];
+  if (!group || typeof group !== "object" || Array.isArray(group)) return null;
+  const value = (group as JsonRecord)[nestedKey];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export default async function NodesPage() {
   const data = await getNodesData();
   const counts = {
@@ -129,28 +146,10 @@ export default async function NodesPage() {
                 data.nodes.map((node) => {
                   const used = numberField(node, "tenant_count") || 0;
                   const max = numberField(node, "max_tenants");
-                  const memory = nestedNumberField(node, "metrics", "memory_available_bytes")
-                    ?? nestedNumberField(node, "metrics", "memory")
-                    ?? null;
-                  const memoryNested = nestedNumberField(node, "metrics", "memory_available_bytes");
-                  const diskNested = nestedNumberField(node, "metrics", "disk_free_bytes");
-                  const cpu = nestedNumberField(node, "metrics", "cpu_percent");
-                  const metricsValue = node.metrics;
-                  let nestedMemory = memoryNested;
-                  let nestedDisk = diskNested;
-                  if (metricsValue && typeof metricsValue === "object" && !Array.isArray(metricsValue)) {
-                    const metrics = metricsValue as JsonRecord;
-                    const memoryObject = metrics.memory;
-                    const diskObject = metrics.disk;
-                    if (nestedMemory === null && memoryObject && typeof memoryObject === "object" && !Array.isArray(memoryObject)) {
-                      const value = (memoryObject as JsonRecord).available_bytes;
-                      nestedMemory = typeof value === "number" ? value : null;
-                    }
-                    if (nestedDisk === null && diskObject && typeof diskObject === "object" && !Array.isArray(diskObject)) {
-                      const value = (diskObject as JsonRecord).free_bytes;
-                      nestedDisk = typeof value === "number" ? value : null;
-                    }
-                  }
+                  const memory = metric(node, "memory_available_bytes", "memory", "available_bytes");
+                  const disk = metric(node, "disk_free_bytes", "disk", "free_bytes");
+                  const cpu = metric(node, "cpu_percent");
+                  const freeSlots = slots(node);
 
                   return (
                     <tr key={field(node, "id")}>
@@ -165,10 +164,10 @@ export default async function NodesPage() {
                       </td>
                       <td>
                         <strong>{used.toLocaleString("ar-EG")} / {max === null ? "—" : max.toLocaleString("ar-EG")}</strong>
-                        <small>{slots(node) === null ? "السعة غير محددة" : `${slots(node)?.toLocaleString("ar-EG")} متاح`}</small>
+                        <small>{freeSlots === null ? "السعة غير محددة" : `${freeSlots.toLocaleString("ar-EG")} متاح`}</small>
                       </td>
-                      <td>{gib(nestedMemory ?? memory)}</td>
-                      <td>{gib(nestedDisk)}</td>
+                      <td>{gib(memory)}</td>
+                      <td>{gib(disk)}</td>
                       <td>{cpu === null ? "—" : `${cpu.toFixed(0)}%`}</td>
                       <td>{dateTime(field(node, "last_seen_at"))}</td>
                       <td><code>{field(node, "agent_version")}</code></td>
