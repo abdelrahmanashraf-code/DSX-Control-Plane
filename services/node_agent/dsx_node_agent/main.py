@@ -18,6 +18,7 @@ from dsx_node_agent.operation_dispatch import (
     parse_any_claimed_operation,
 )
 from dsx_node_agent.operations import OperationExecutionResult, OperationProtocolError
+from dsx_node_agent.restore_operation import RestoreClaimedOperation, purge_restore_download_local
 from dsx_node_agent.settings import AgentSettings
 from dsx_node_agent.state import NodeIdentity, load_identity
 
@@ -117,6 +118,13 @@ def _advance_active_operation(
             if not purged:
                 print(
                     f"verified backup local purge deferred id={active.operation.operation_id}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        if isinstance(active.operation, RestoreClaimedOperation) and result.state == "validated":
+            if not purge_restore_download_local(active.operation):
+                print(
+                    f"validated restore download purge deferred id={active.operation.operation_id}",
                     file=sys.stderr,
                     flush=True,
                 )
