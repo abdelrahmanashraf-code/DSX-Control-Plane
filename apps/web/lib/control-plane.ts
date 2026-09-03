@@ -39,6 +39,14 @@ export type TenantsData = {
   tenants: JsonRecord[];
 };
 
+export type OperationsData = {
+  configured: boolean;
+  error: string | null;
+  provisioningJobs: JsonRecord[];
+  backupJobs: JsonRecord[];
+  restoreJobs: JsonRecord[];
+};
+
 export type CreateTrialInput = {
   name: string;
   slug: string;
@@ -222,6 +230,34 @@ export async function getTenantsData(): Promise<TenantsData> {
       configured: true,
       error: error instanceof Error ? error.message : "control_plane_unavailable",
       tenants: [],
+    };
+  }
+}
+
+export async function getOperationsData(): Promise<OperationsData> {
+  if (!config()) {
+    return { configured: false, error: null, provisioningJobs: [], backupJobs: [], restoreJobs: [] };
+  }
+  try {
+    const [provisioningPayload, backupsPayload, restoresPayload] = await Promise.all([
+      request("/v1/admin/provisioning-jobs"),
+      request("/v1/admin/backup-jobs"),
+      request("/v1/admin/restore-jobs"),
+    ]);
+    return {
+      configured: true,
+      error: null,
+      provisioningJobs: records(provisioningPayload, "jobs"),
+      backupJobs: records(backupsPayload, "backup_jobs"),
+      restoreJobs: records(restoresPayload, "restore_jobs"),
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      error: error instanceof Error ? error.message : "control_plane_unavailable",
+      provisioningJobs: [],
+      backupJobs: [],
+      restoreJobs: [],
     };
   }
 }
