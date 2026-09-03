@@ -6,8 +6,8 @@ import json
 import tarfile
 from pathlib import Path
 
-from pydantic import SecretStr
 import pytest
+from pydantic import SecretStr
 
 from dsx_node_agent import restore_operation
 from dsx_node_agent.operation_dispatch import parse_any_claimed_operation
