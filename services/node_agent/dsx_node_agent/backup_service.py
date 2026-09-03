@@ -291,6 +291,28 @@ class BackupEngine:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
+        expected_manifest_fields = {
+            "schema_version",
+            "backup_id",
+            "tenant_id",
+            "environment_kind",
+            "template_id",
+            "provisioning_operation_id",
+            "database_name",
+            "backup_type",
+            "created_at",
+            "artifacts",
+        }
+        if not isinstance(manifest, dict) or set(manifest) != expected_manifest_fields:
+            return None
+        if manifest.get("schema_version") != 1:
+            return None
+        if manifest.get("environment_kind") != request.environment_kind:
+            return None
+        created_at = manifest.get("created_at")
+        if not isinstance(created_at, str) or not created_at.strip():
+            return None
+
         identity = (
             manifest.get("backup_id"),
             manifest.get("tenant_id"),
@@ -310,14 +332,43 @@ class BackupEngine:
         if identity != expected:
             return None
 
-        artifacts = [
-            _artifact("database_dump", _DATABASE_FILE, database_path),
-            _artifact("filestore_archive", _FILESTORE_FILE, filestore_path),
-            _artifact("manifest", _MANIFEST_FILE, manifest_path),
-        ]
-        manifest_sha256 = artifacts[2]["sha256"]
+        manifest_artifacts = manifest.get("artifacts")
+        if not isinstance(manifest_artifacts, list) or len(manifest_artifacts) != 2:
+            return None
+        expected_artifact_fields = {"artifact_kind", "file_name", "size_bytes", "sha256"}
+        by_kind: dict[str, dict[str, Any]] = {}
+        for item in manifest_artifacts:
+            if not isinstance(item, dict) or set(item) != expected_artifact_fields:
+                return None
+            kind = item.get("artifact_kind")
+            file_name = item.get("file_name")
+            size_bytes = item.get("size_bytes")
+            sha256 = item.get("sha256")
+            if kind not in {"database_dump", "filestore_archive"} or kind in by_kind:
+                return None
+            expected_file_name = _DATABASE_FILE if kind == "database_dump" else _FILESTORE_FILE
+            if file_name != expected_file_name:
+                return None
+            if type(size_bytes) is not int or size_bytes < 0:
+                return None
+            if not isinstance(sha256, str) or not _SHA256.fullmatch(sha256):
+                return None
+            by_kind[kind] = item
+        if set(by_kind) != {"database_dump", "filestore_archive"}:
+            return None
+
+        database_artifact = _artifact("database_dump", _DATABASE_FILE, database_path)
+        filestore_artifact = _artifact("filestore_archive", _FILESTORE_FILE, filestore_path)
+        if database_artifact != by_kind["database_dump"]:
+            return None
+        if filestore_artifact != by_kind["filestore_archive"]:
+            return None
+
+        manifest_artifact = _artifact("manifest", _MANIFEST_FILE, manifest_path)
+        manifest_sha256 = manifest_artifact["sha256"]
         if not isinstance(manifest_sha256, str) or not _SHA256.fullmatch(manifest_sha256):
             return None
+        artifacts = [database_artifact, filestore_artifact, manifest_artifact]
         return {
             "state": "prepared",
             "manifest_sha256": manifest_sha256,
