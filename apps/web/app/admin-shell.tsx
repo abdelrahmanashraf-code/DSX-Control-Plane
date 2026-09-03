@@ -6,7 +6,7 @@ const NAV_ITEMS = [
   { arabic: "التجارب", english: "Trials", href: "/trials", key: "trials", enabled: true },
   { arabic: "العملاء", english: "Tenants", href: "/tenants", key: "tenants", enabled: true },
   { arabic: "السيرفرات", english: "Nodes", href: "/nodes", key: "nodes", enabled: true },
-  { arabic: "العمليات", english: "Provisioning", href: "/provisioning", key: "provisioning", enabled: false },
+  { arabic: "العمليات", english: "Provisioning", href: "/provisioning", key: "provisioning", enabled: true },
   { arabic: "النسخ", english: "Backups & Restore", href: "/backups", key: "backups", enabled: false },
   { arabic: "التنبيهات", english: "Alerts", href: "/alerts", key: "alerts", enabled: false },
   { arabic: "السجل", english: "Audit Log", href: "/audit", key: "audit", enabled: false },
