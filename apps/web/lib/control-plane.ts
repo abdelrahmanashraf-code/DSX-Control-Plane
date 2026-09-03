@@ -182,6 +182,13 @@ export async function createTrial(input: CreateTrialInput): Promise<void> {
   });
 }
 
+export async function retryTrialCleanup(tenantId: string): Promise<void> {
+  if (!config()) throw new Error("control_plane_not_configured");
+  await request(`/v1/admin/trials/${encodeURIComponent(tenantId)}/cleanup/retry`, {
+    method: "POST",
+  });
+}
+
 export function field(record: JsonRecord, key: string, fallback = "—"): string {
   const value = record[key];
   if (typeof value === "string" && value.trim()) return value;
