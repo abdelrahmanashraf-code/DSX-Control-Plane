@@ -236,7 +236,6 @@ async function createTrial(request: Request, env: Env): Promise<Response> {
   const tenantId = crypto.randomUUID();
   const jobId = crypto.randomUUID();
   const createdAt = nowIso();
-  const expiresAt = trialExpiryFrom(createdAt);
   const publicHostname = trialHostname(input.slug, env.TRIAL_BASE_DOMAIN);
   const placementPayload = JSON.stringify({
     node_id: placement.id,
@@ -251,7 +250,7 @@ async function createTrial(request: Request, env: Env): Promise<Response> {
          (id, name, slug, sector, environment_kind, status, assigned_node_id,
           trial_state, trial_request_key, trial_requested_at, trial_expires_at, public_hostname,
           created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'trial', 'provisioning', ?, 'provisioning', ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, 'trial', 'provisioning', ?, 'provisioning', ?, ?, NULL, ?, ?, ?)`,
     ).bind(
       tenantId,
       input.name,
@@ -260,7 +259,6 @@ async function createTrial(request: Request, env: Env): Promise<Response> {
       placement.id,
       input.idempotency_key,
       createdAt,
-      expiresAt,
       publicHostname,
       createdAt,
       createdAt,
@@ -299,7 +297,7 @@ async function createTrial(request: Request, env: Env): Promise<Response> {
       JSON.stringify({
         slug: input.slug,
         sector: input.sector,
-        expires_at: expiresAt,
+        duration_days: TRIAL_DURATION_DAYS,
         node_id: placement.id,
         public_hostname: publicHostname,
       }),
