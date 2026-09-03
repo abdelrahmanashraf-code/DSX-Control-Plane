@@ -21,6 +21,19 @@ export type DashboardData = {
   recentAlerts: JsonRecord[];
 };
 
+export type TrialsData = {
+  configured: boolean;
+  error: string | null;
+  trials: JsonRecord[];
+};
+
+export type CreateTrialInput = {
+  name: string;
+  slug: string;
+  sector: "restaurant" | "cafe" | "retail" | "supermarket";
+  idempotencyKey: string;
+};
+
 const EMPTY_COUNTS: DashboardData["counts"] = {
   tenants: 0,
   trials: 0,
@@ -41,24 +54,29 @@ function config(): { baseUrl: string; token: string } | null {
   return { baseUrl, token };
 }
 
-async function request(path: string): Promise<JsonRecord> {
+async function request(path: string, init?: RequestInit): Promise<JsonRecord> {
   const runtime = config();
   if (!runtime) throw new Error("control_plane_not_configured");
 
+  const headers = new Headers(init?.headers);
+  headers.set("authorization", `Bearer ${runtime.token}`);
+  headers.set("accept", "application/json");
+
   const response = await fetch(`${runtime.baseUrl}${path}`, {
-    headers: {
-      authorization: `Bearer ${runtime.token}`,
-      accept: "application/json",
-    },
+    ...init,
+    headers,
     cache: "no-store",
     signal: AbortSignal.timeout(8000),
   });
 
+  const value: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(`control_plane_http_${response.status}`);
+    const code = value && typeof value === "object" && !Array.isArray(value) && typeof (value as JsonRecord).error === "string"
+      ? (value as JsonRecord).error
+      : `http_${response.status}`;
+    throw new Error(`control_plane_${code}`);
   }
 
-  const value: unknown = await response.json();
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("control_plane_invalid_json");
   }
@@ -134,6 +152,34 @@ export async function getDashboardData(): Promise<DashboardData> {
       recentAlerts: [],
     };
   }
+}
+
+export async function getTrialsData(): Promise<TrialsData> {
+  if (!config()) return { configured: false, error: null, trials: [] };
+  try {
+    const payload = await request("/v1/admin/trials");
+    return { configured: true, error: null, trials: records(payload, "trials") };
+  } catch (error) {
+    return {
+      configured: true,
+      error: error instanceof Error ? error.message : "control_plane_unavailable",
+      trials: [],
+    };
+  }
+}
+
+export async function createTrial(input: CreateTrialInput): Promise<void> {
+  if (!config()) throw new Error("control_plane_not_configured");
+  await request("/v1/admin/trials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: input.name,
+      slug: input.slug,
+      sector: input.sector,
+      idempotency_key: input.idempotencyKey,
+    }),
+  });
 }
 
 export function field(record: JsonRecord, key: string, fallback = "—"): string {
