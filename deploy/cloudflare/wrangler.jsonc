@@ -5,7 +5,8 @@
   "compatibility_date": "2026-09-01",
   "vars": {
     "NODE_STALE_SECONDS": "90",
-    "NODE_OFFLINE_SECONDS": "300"
+    "NODE_OFFLINE_SECONDS": "300",
+    "TRIAL_BASE_DOMAIN": "trial.dsxpos.com"
   },
   "triggers": {
     "crons": ["0 * * * *"]
