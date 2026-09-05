@@ -110,6 +110,11 @@ def test_trial_runtime_materializes_isolated_instance(
     monkeypatch.setattr(lifecycle, "_health", lambda port: None)
     monkeypatch.setattr(lifecycle, "_reload", lambda: None)
     monkeypatch.setattr(lifecycle, "_port_available", lambda port: True)
+    monkeypatch.setattr(
+        runtime_service.ProvisioningEngine,
+        "_chown_tree",
+        lambda path, user, group: None,
+    )
 
     lifecycle.ensure(request(), profile)
     target = runtime_root / request().database_name
