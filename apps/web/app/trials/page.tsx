@@ -43,10 +43,6 @@ function dateTime(value: string): string {
   }).format(parsed);
 }
 
-function compactId(value: string): string {
-  return value && value !== "—" ? `${value.slice(0, 8)}…` : "—";
-}
-
 function recordField(record: JsonRecord | null, key: string): JsonRecord | null {
   if (!record) return null;
   const value = record[key];
@@ -387,7 +383,7 @@ export default async function TrialsPage({ searchParams }: TrialsPageProps) {
                             <StatusPill value={trialState} />
                             <small>Provisioning: {field(trial, "status", trialState)}</small>
                           </td>
-                          <td><code title={assignedNodeId}>{compactId(assignedNodeId)}</code></td>
+                          <td><code>{assignedNodeId || "—"}</code></td>
                           <td className="cleanup-cell">
                             {cleanupState ? <StatusPill value={cleanupState} /> : <span className="muted">—</span>}
                             {cleanupError && <small>{cleanupError}</small>}
