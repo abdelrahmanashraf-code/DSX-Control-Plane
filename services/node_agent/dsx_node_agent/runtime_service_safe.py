@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+# ruff: noqa: I001
+
 import shutil
-from pathlib import Path
 
 from dsx_node_agent import runtime_service as runtime
 from dsx_node_agent.provisioner import ProvisionRequest, ProvisionerError, ProvisioningEngine
