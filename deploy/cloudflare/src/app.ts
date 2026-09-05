@@ -13,6 +13,7 @@ import { handleRestoreOperationRoute } from "./restoreOperations";
 import { handleRestoreAdminRoute } from "./restores";
 import { handleTrialCleanupAdminRoute } from "./trialCleanupAdmin";
 import { handleTrialCleanupOperationRoute } from "./trialCleanupOperations";
+import { handleTrialConversionAdminRoute } from "./trialConversion";
 import { reconcileExpiredTrials } from "./trialExpiration";
 import { handleTrialAdminRoute } from "./trials";
 
@@ -84,6 +85,9 @@ export default {
 
     const retryResponse = await handleProvisioningRetryRoute(request, env);
     if (retryResponse) return retryResponse;
+
+    const trialConversionResponse = await handleTrialConversionAdminRoute(request, env);
+    if (trialConversionResponse) return trialConversionResponse;
 
     const trialResponse = await handleTrialAdminRoute(request, env);
     if (trialResponse) return trialResponse;
