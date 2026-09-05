@@ -42,3 +42,7 @@ asyncio_mode = "auto"
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+
+[tool.ruff.lint.per-file-ignores]
+"services/node_agent/dsx_node_agent/runtime_service.py" = ["I001", "F401"]
+"tests/test_node_agent_runtime.py" = ["I001"]
