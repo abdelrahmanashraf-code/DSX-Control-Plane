@@ -7,6 +7,7 @@ import { handleCleanupOperationRoute } from "./cleanupOperations";
 import { listNodeHealthHistory } from "./healthHistory";
 import legacyWorker from "./index";
 import { handleNodeOperationRoute } from "./nodeOperations";
+import { handleProductionPlacementAdminRoute } from "./productionPlacement";
 import { handleProvisioningAdminRoute } from "./provisioning";
 import { handleProvisioningRetryRoute } from "./provisioningRetry";
 import { handleRestoreOperationRoute } from "./restoreOperations";
@@ -23,6 +24,7 @@ interface Env {
   NODE_STALE_SECONDS?: string;
   NODE_OFFLINE_SECONDS?: string;
   NODE_OPERATION_LEASE_SECONDS?: string;
+  PRODUCTION_PROVISIONING_ENABLED?: string;
   TRIAL_BASE_DOMAIN?: string;
 }
 
@@ -85,6 +87,9 @@ export default {
 
     const retryResponse = await handleProvisioningRetryRoute(request, env);
     if (retryResponse) return retryResponse;
+
+    const productionPlacementResponse = await handleProductionPlacementAdminRoute(request, env);
+    if (productionPlacementResponse) return productionPlacementResponse;
 
     const trialConversionResponse = await handleTrialConversionAdminRoute(request, env);
     if (trialConversionResponse) return trialConversionResponse;
