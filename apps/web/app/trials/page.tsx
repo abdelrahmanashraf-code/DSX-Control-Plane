@@ -330,6 +330,8 @@ export default async function TrialsPage({ searchParams }: TrialsPageProps) {
                   <th>العميل</th>
                   <th>القطاع</th>
                   <th>الحالة</th>
+                  <th>Provisioning</th>
+                  <th>Node</th>
                   <th>التنظيف</th>
                   <th>قاعدة البيانات</th>
                   <th>الدومين</th>
@@ -340,11 +342,13 @@ export default async function TrialsPage({ searchParams }: TrialsPageProps) {
               </thead>
               <tbody>
                 {data.trials.length === 0 ? (
-                  <tr><td colSpan={9} className="empty">لا توجد تجارب حتى الآن.</td></tr>
+                  <tr><td colSpan={11} className="empty">لا توجد تجارب حتى الآن.</td></tr>
                 ) : (
                   data.trials.map((trial) => {
                     const tenantId = field(trial, "id", "");
                     const trialState = field(trial, "trial_state", field(trial, "status"));
+                    const provisioningState = field(trial, "status", trialState);
+                    const assignedNodeId = field(trial, "assigned_node_id", "");
                     const cleanupState = field(trial, "cleanup_state", "");
                     const cleanupError = field(trial, "cleanup_error_code", "");
                     const canRetry = trialState === "failed" && cleanupState === "failed" && UUID.test(tenantId);
@@ -378,6 +382,8 @@ export default async function TrialsPage({ searchParams }: TrialsPageProps) {
                           </td>
                           <td>{field(trial, "sector")}</td>
                           <td><StatusPill value={trialState} /></td>
+                          <td><StatusPill value={provisioningState} /></td>
+                          <td><code>{assignedNodeId || "—"}</code></td>
                           <td className="cleanup-cell">
                             {cleanupState ? <StatusPill value={cleanupState} /> : <span className="muted">—</span>}
                             {cleanupError && <small>{cleanupError}</small>}
@@ -403,7 +409,7 @@ export default async function TrialsPage({ searchParams }: TrialsPageProps) {
 
                         {(conversion || canRequestConversion) && (
                           <tr>
-                            <td colSpan={9}>
+                            <td colSpan={11}>
                               <div className="trial-form-note">
                                 {!conversion && canRequestConversion && (
                                   <form action={requestConversionAction}>
