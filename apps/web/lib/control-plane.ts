@@ -25,6 +25,7 @@ export type TrialsData = {
   configured: boolean;
   error: string | null;
   trials: JsonRecord[];
+  conversionsByTrial: Record<string, JsonRecord[]>;
 };
 
 export type NodesData = {
@@ -175,15 +176,59 @@ export async function getDashboardData(): Promise<DashboardData> {
 }
 
 export async function getTrialsData(): Promise<TrialsData> {
-  if (!config()) return { configured: false, error: null, trials: [] };
+  if (!config()) return { configured: false, error: null, trials: [], conversionsByTrial: {} };
   try {
-    const payload = await request("/v1/admin/trials");
-    return { configured: true, error: null, trials: records(payload, "trials") };
+    const [trialsPayload, tenantsPayload, provisioningPayload] = await Promise.all([
+      request("/v1/admin/trials"),
+      request("/v1/admin/tenants"),
+      request("/v1/admin/provisioning-jobs"),
+    ]);
+    const trials = records(trialsPayload, "trials");
+    const tenants = records(tenantsPayload, "tenants");
+    const provisioningJobs = records(provisioningPayload, "jobs");
+    const tenantById = new Map(tenants.map((tenant) => [text(tenant, "id"), tenant]));
+
+    const conversionEntries = await Promise.all(
+      trials.map(async (trial): Promise<[string, JsonRecord[]]> => {
+        const trialId = text(trial, "id");
+        if (!trialId) return ["", []];
+        try {
+          const payload = await request(`/v1/admin/trials/${encodeURIComponent(trialId)}/conversions`);
+          const conversions = records(payload, "conversions").map((conversion) => {
+            const conversionId = text(conversion, "id");
+            const targetTenantId = text(conversion, "target_tenant_id");
+            const targetTenant = targetTenantId ? tenantById.get(targetTenantId) ?? null : null;
+            const provisioningJob = targetTenantId && conversionId
+              ? provisioningJobs.find((job) =>
+                text(job, "tenant_id") === targetTenantId
+                && text(job, "idempotency_key") === `conversion:${conversionId}`,
+              ) ?? null
+              : null;
+            return {
+              ...conversion,
+              target_tenant: targetTenant,
+              provisioning_job: provisioningJob,
+            };
+          });
+          return [trialId, conversions];
+        } catch {
+          return [trialId, []];
+        }
+      }),
+    );
+
+    return {
+      configured: true,
+      error: null,
+      trials,
+      conversionsByTrial: Object.fromEntries(conversionEntries.filter(([trialId]) => Boolean(trialId))),
+    };
   } catch (error) {
     return {
       configured: true,
       error: error instanceof Error ? error.message : "control_plane_unavailable",
       trials: [],
+      conversionsByTrial: {},
     };
   }
 }
@@ -281,6 +326,57 @@ export async function retryTrialCleanup(tenantId: string): Promise<void> {
   await request(`/v1/admin/trials/${encodeURIComponent(tenantId)}/cleanup/retry`, {
     method: "POST",
   });
+}
+
+export async function requestTrialConversion(tenantId: string, idempotencyKey: string): Promise<void> {
+  if (!config()) throw new Error("control_plane_not_configured");
+  await request(`/v1/admin/trials/${encodeURIComponent(tenantId)}/conversions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      idempotency_key: idempotencyKey,
+      mode: "clean_production",
+    }),
+  });
+}
+
+export async function approveTrialConversion(
+  tenantId: string,
+  conversionId: string,
+  productionName?: string,
+  productionSlug?: string,
+): Promise<void> {
+  if (!config()) throw new Error("control_plane_not_configured");
+  await request(
+    `/v1/admin/trials/${encodeURIComponent(tenantId)}/conversions/${encodeURIComponent(conversionId)}/approve`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        production_name: productionName || undefined,
+        production_slug: productionSlug || undefined,
+      }),
+    },
+  );
+}
+
+export async function placeTrialProduction(
+  tenantId: string,
+  conversionId: string,
+  nodeId: string,
+): Promise<void> {
+  if (!config()) throw new Error("control_plane_not_configured");
+  await request(
+    `/v1/admin/trials/${encodeURIComponent(tenantId)}/conversions/${encodeURIComponent(conversionId)}/place-production`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        confirm_production_placement: true,
+        node_id: nodeId,
+      }),
+    },
+  );
 }
 
 export function field(record: JsonRecord, key: string, fallback = "—"): string {
