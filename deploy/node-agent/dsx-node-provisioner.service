@@ -27,7 +27,7 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-ReadWritePaths=/var/lib/dsx-provisioner /var/lib/odoo/.local/share/Odoo/filestore /var/lib/dsx-backup-outbox /var/odoo /etc/systemd/system /etc/nginx/conf.d
+ReadWritePaths=/var/lib/dsx-provisioner /var/lib/odoo/.local/share/Odoo/filestore /var/lib/dsx-backup-outbox /var/odoo /etc/systemd/system /etc/nginx/conf.d /var/log/nginx
 CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID
 UMask=0007
 
