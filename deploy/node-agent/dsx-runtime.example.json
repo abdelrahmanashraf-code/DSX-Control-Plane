@@ -1,0 +1,11 @@
+{
+  "enabled": false,
+  "trial_base_domain": "trial.dsxpos.com",
+  "http_port_start": 3100,
+  "http_port_end": 3998,
+  "runtime_user": "odoo",
+  "runtime_group": "odoo",
+  "health_timeout_seconds": 120,
+  "tls_certificate": null,
+  "tls_certificate_key": null
+}
