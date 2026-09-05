@@ -15,6 +15,10 @@ import { handleRestoreAdminRoute } from "./restores";
 import { handleTrialCleanupAdminRoute } from "./trialCleanupAdmin";
 import { handleTrialCleanupOperationRoute } from "./trialCleanupOperations";
 import { handleTrialConversionAdminRoute } from "./trialConversion";
+import {
+  reconcileActiveTrialConversions,
+  reconcileTrialConversionForProvisioningJob,
+} from "./trialConversionReconcile";
 import { reconcileExpiredTrials } from "./trialExpiration";
 import { handleTrialAdminRoute } from "./trials";
 
@@ -71,7 +75,12 @@ export default {
     if (cleanupOperationResponse) return cleanupOperationResponse;
 
     const nodeOperationResponse = await handleNodeOperationRoute(request, env);
-    if (nodeOperationResponse) return nodeOperationResponse;
+    if (nodeOperationResponse) {
+      if (operationResultMatch && nodeOperationResponse.ok) {
+        await reconcileTrialConversionForProvisioningJob(env, operationResultMatch[2]);
+      }
+      return nodeOperationResponse;
+    }
 
     const restoreAdminResponse = await handleRestoreAdminRoute(request, env);
     if (restoreAdminResponse) return restoreAdminResponse;
@@ -105,5 +114,6 @@ export default {
 
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     await reconcileExpiredTrials(env);
+    await reconcileActiveTrialConversions(env);
   },
 };
