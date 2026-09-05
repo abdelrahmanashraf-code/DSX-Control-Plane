@@ -1,3 +1,5 @@
+# ruff: noqa: I001
+
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -61,7 +63,6 @@ def test_trial_runtime_failure_rolls_back_database_and_filestore(
     filestore.mkdir(parents=True)
     dropped: list[str] = []
 
-    monkeypatch.setattr(engine, "_database_exists", lambda name: name == request.database_name)
     monkeypatch.setattr(
         engine,
         "_read_marker",
